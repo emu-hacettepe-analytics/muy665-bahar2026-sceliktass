@@ -1,368 +1,668 @@
 ---
-
+title: "Türkiye'de Yükseköğretim Mezunlarının Beyin Göçü Analizi"
+author: "Proje Ekibi"
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-fold: true
+    code-tools: true
+editor: visual
 ---
 
----
-
----
-
-```{# ==============================================================================}
-# ==============================================================================
-# MÜY665 İş Analitiği – Dönem Projesi
-# Türkiye'de Eğitim Alanına Göre Beyin Göçü Analizi
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# 1. PAKETLER
-# ------------------------------------------------------------------------------
-
-paketler <- c(
-  "tidyverse",
-  "readxl",
-  "scales",
-  "knitr",
-  "kableExtra",
-  "ggrepel",
-  "patchwork",
-  "plotly",
-  "viridis"
-)
-
-eksik <- paketler[!paketler %in% installed.packages()[, "Package"]]
-
-if(length(eksik) > 0){
-  install.packages(eksik)
-}
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
 
 library(tidyverse)
 library(readxl)
 library(scales)
+library(broom)
 library(knitr)
-library(kableExtra)
-library(ggrepel)
-library(patchwork)
-library(plotly)
-library(viridis)
 
-# ------------------------------------------------------------------------------
-# 2. VERİ YÜKLEME
-# ------------------------------------------------------------------------------
-
-dosya <- "Eğitim ve öğretim alanlarına göre yükseköğretim mezunlarının beyin göçü oranı (TR,DF_EGITIM_OGRETIM_ALAN,1.0).xlsx"
-
-ham <- read_excel(dosya, sheet = 1, col_names = FALSE)
-
-print(ham)
-
-# ------------------------------------------------------------------------------
-# 3. VERİ TEMİZLEME
-# ------------------------------------------------------------------------------
-
-alan_adlari <- ham[8:17, 1] |> pull()
-
-yil_2021 <- ham[8:17, 2] |> pull() |> as.numeric()
-yil_2022 <- ham[8:17, 3] |> pull() |> as.numeric()
-yil_2023 <- ham[8:17, 4] |> pull() |> as.numeric()
-yil_2024 <- ham[8:17, 5] |> pull() |> as.numeric()
-
-# Kısa isimler
-
-kisalt <- c(
-  "Bilişim ve iletişim teknolojileri" = "BİT",
-  "Mühendislik, imalat ve inşaat" = "Müh. & İnşaat",
-  "Doğa bilimleri, matematik ve istatistik" = "Doğa Bil. & Mat.",
-  "Hizmetler" = "Hizmetler",
-  "Sosyal bilimler, gazetecilik ve enformasyon" = "Sosyal Bil.",
-  "Sanat ve beşeri bilimler" = "Sanat & Beşeri",
-  "İş, yönetim ve hukuk" = "İş & Hukuk",
-  "Tarım, ormancılık, balıkçılık ve veterinerlik" = "Tarım & Vet.",
-  "Sağlık ve refah" = "Sağlık & Refah",
-  "Eğitim" = "Eğitim"
-)
-
-# Long format
-
-df_long <- tibble(
-  alan = rep(alan_adlari, 4),
-  yil = rep(c(2021, 2022, 2023, 2024), each = length(alan_adlari)),
-  oran = c(yil_2021, yil_2022, yil_2023, yil_2024)
-) |>
+# --- 1) Ana veri: Egitim alanlarina gore beyin gocu (2021-2024) ---
+veri_alanlar <- read_excel("data/beyin_gocu_alanlar.xlsx")
+veri_alanlar <- veri_alanlar %>%
   mutate(
-    alan_kisa = recode(alan, !!!kisalt)
+    Yil = as.integer(Yil),
+    Egitim_Alani = as.character(Egitim_Alani),
+    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani),
+    Yil_Factor = factor(Yil, levels = c(2021, 2022, 2023, 2024))
   )
 
-# Wide format
+# --- 2) Cinsiyete gore beyin gocu ---
+veri_cinsiyet <- read_excel("data/beyin_gocu_cinsiyet.xlsx") %>%
+  mutate(
+    Yil = as.integer(Yil),
+    Cinsiyet = factor(Cinsiyet, levels = c("Genel", "Kadin", "Erkek")),
+    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
+  )
 
-df_wide <- tibble(
-  Alan = alan_adlari,
-  `2021` = yil_2021,
-  `2022` = yil_2022,
-  `2023` = yil_2023,
-  `2024` = yil_2024
-)
+# --- 3) Universite turune gore beyin gocu ---
+veri_universite <- read_excel("data/beyin_gocu_universite.xlsx") %>%
+  mutate(
+    Yil = as.integer(Yil),
+    Universite_Turu = as.character(Universite_Turu),
+    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
+  )
 
-cat("Veri başarıyla yüklendi\n")
+# --- 4) Goc edilen ulkelere gore dagilim ---
+veri_ulke <- read_excel("data/beyin_gocu_ulke.xlsx") %>%
+  mutate(
+    Yil = as.integer(Yil),
+    Ulke = as.character(Ulke),
+    Pay_Yuzdesi = as.numeric(Pay_Yuzdesi)
+  )
 
-# ------------------------------------------------------------------------------
-# 4. TEMEL İSTATİSTİKLER
-# ------------------------------------------------------------------------------
+# --- 5) Egitim diline gore beyin gocu ---
+veri_dil <- read_excel("data/beyin_gocu_dil.xlsx") %>%
+  mutate(
+    Yil = as.integer(Yil),
+    Egitim_Dili = as.character(Egitim_Dili),
+    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
+  )
 
-ozet <- df_long |>
-  group_by(alan_kisa) |>
+# --- 6) En yuksek beyin gocu oranina sahip lisans bolumleri ---
+veri_bolum <- read_excel("data/beyin_gocu_bolum.xlsx") %>%
+  mutate(
+    Yil = as.integer(Yil),
+    Bolum = as.character(Bolum),
+    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
+  )
+
+# --- Ek hesaplamalar ---
+alan_ortalama <- veri_alanlar %>%
+  group_by(Egitim_Alani) %>%
   summarise(
-    Ortalama = mean(oran, na.rm = TRUE),
-    Medyan = median(oran, na.rm = TRUE),
-    Minimum = min(oran, na.rm = TRUE),
-    Maksimum = max(oran, na.rm = TRUE),
-    Degisim = last(oran) - first(oran),
+    Ortalama_Oran = mean(Beyin_Gocu_Orani),
+    Min_Oran = min(Beyin_Gocu_Orani),
+    Max_Oran = max(Beyin_Gocu_Orani),
     .groups = "drop"
-  ) |>
-  arrange(desc(Ortalama))
+  ) %>%
+  arrange(desc(Ortalama_Oran))
 
-print(ozet)
+yillik_ortalama <- veri_alanlar %>%
+  group_by(Yil) %>%
+  summarise(
+    Ortalama_Oran = mean(Beyin_Gocu_Orani),
+    .groups = "drop"
+  )
+```
 
-# ------------------------------------------------------------------------------
-# 5. KUTU GRAFİĞİ
-# ------------------------------------------------------------------------------
+# Proje Genel Bakış ve Kapsamı
 
-p1 <- df_long |>
-  mutate(alan_kisa = forcats::fct_reorder(alan_kisa, oran, median)) |>
-  ggplot(aes(x = alan_kisa, y = oran, fill = alan_kisa)) +
+Bu projenin amacı, Türkiye'deki yükseköğretim mezunlarının yurt dışına göçünü (beyin göçü) farklı boyutlarıyla incelemektir. Beyin göçü, gelişmekte olan ülkelerin en önemli sosyo-ekonomik sorunlarından biridir; çünkü ülkenin eğitime ayırdığı kaynaklarla yetiştirdiği nitelikli iş gücünün yurt dışına gitmesi, hem ekonomik bir kayıp hem de uzun vadeli kalkınma için ciddi bir engel oluşturur. Türkiye İstatistik Kurumu (TÜİK), 2024 yılı itibarıyla yükseköğretim mezunlarının beyin göçü oranının %2,0 olduğunu açıklamıştır; ancak bu ortalama oranın altında, eğitim alanına, cinsiyete, üniversite türüne ve eğitim diline göre çok daha çarpıcı farklılıklar bulunmaktadır.
 
-  geom_boxplot(alpha = 0.7) +
+Bu çalışmada beş farklı veri seti birlikte ele alınmıştır:
 
-  geom_jitter(
-    width = 0.15,
-    size = 2,
-    alpha = 0.8
-  ) +
+1.  Eğitim ve öğretim alanlarına göre beyin göçü oranları (2021-2024)
 
-  coord_flip() +
+2.  Cinsiyete göre beyin göçü oranları (2021-2024)
 
-  scale_fill_viridis_d(option = "plasma") +
+3.  Üniversite türüne (Devlet/Vakıf) ve burs durumuna göre beyin göçü oranları (2021-2024)
 
+4.  Göç edilen ülkelere göre yükseköğretim mezunlarının dağılımı (2023-2024)
+
+5.  Eğitim diline göre beyin göçü oranları (2024)
+
+6.  En yüksek beyin göçü oranına sahip lisans bölümleri (2023-2024)
+
+Analiz kapsamında dört temel soruya yanıt aranmıştır: (i) Hangi eğitim alanlarından mezun olanlar yurt dışına daha fazla göç ediyor? (ii) Cinsiyetler arasında beyin göçü açısından fark var mı ve bu fark yıllar içinde nasıl değişiyor? (iii) Vakıf ve devlet üniversitelerinden mezun olanların göç eğilimleri arasında nasıl bir fark vardır? (iv) Mezunlar en çok hangi ülkeleri tercih ediyor? Çalışma, sadece tanımlayıcı istatistiklerle yetinmeyip, basit doğrusal trend modelleri ile eğilimleri de incelemektedir.
+
+# Veri
+
+Bu projede kullanılan veri setlerinin tamamı, Türkiye İstatistik Kurumu'nun (TÜİK) "Yükseköğretim Beyin Göçü İstatistikleri" haber bültenlerinden alınmıştır. TÜİK bu çalışmayı ilk kez 2024 yılında 2021-2023 dönemini kapsayacak şekilde yayımlamış, daha sonra 2025'te 2024 dönemine ait verileri açıklamıştır. Veriler; eğitim ve öğretim alanı, bölüm, cinsiyet, üniversite türü, eğitim dili ve göç edilen ülke ayrımlarında raporlanmaktadır.
+
+```{r}
+#| label: veri-ilk-bakis
+
+head(veri_alanlar, 10) %>%
+  kable(caption = "Eğitim alanlarına göre beyin göçü oranı verisinin ilk 10 satırı")
+```
+
+## Veri Kaynağı
+
+Veri seti TÜİK tarafından açıklanan "Yükseköğretim Beyin Göçü İstatistikleri" bültenlerinden derlenmiştir. TÜİK çalışmada veri kaynağı olarak Yükseköğretim Kurulu (YÖK) mezun kayıtları ile İçişleri Bakanlığı Nüfus ve Vatandaşlık İşleri Genel Müdürlüğü'nden (NVİGM) alınan Adrese Dayalı Nüfus Kayıt Sistemi (ADNKS) ve Merkezi Nüfus İdare Sistemi (MERNİS) kayıtlarını kullanmaktadır. Tanım gereği, beyin göçüne dahil edilen bireyler; lisans eğitimini Türkiye'de tamamlayıp mezuniyet sonrasında yurt dışında uzun süreli ikamet eden Türkiye Cumhuriyeti vatandaşlarıdır.
+
+Veri seti yıllık olarak yayımlanmakta ve coğrafi olarak Türkiye geneline ait toplulaştırılmış oranları içermektedir. Bu çalışmada altı farklı Excel dosyası kullanılmıştır: `beyin_gocu_alanlar.xlsx`, `beyin_gocu_cinsiyet.xlsx`, `beyin_gocu_universite.xlsx`, `beyin_gocu_ulke.xlsx`, `beyin_gocu_dil.xlsx` ve `beyin_gocu_bolum.xlsx`. Tüm dosyalar proje kökündeki `data/` klasöründe yer almakta ve `readxl` paketinin `read_excel()` fonksiyonu ile R ortamına aktarılmıştır.
+
+```{r}
+#| label: veri-kaynak-kontrol
+
+unique(veri_alanlar$Yil)
+unique(veri_alanlar$Egitim_Alani)
+unique(veri_cinsiyet$Cinsiyet)
+unique(veri_universite$Universite_Turu)
+unique(veri_ulke$Ulke)
+```
+
+## Veri Hakkında Genel Bilgiler
+
+Çalışmada kullanılan ana veri seti (`beyin_gocu_alanlar.xlsx`) toplam 40 gözlemden oluşmaktadır. Bu sayı, 10 eğitim alanı × 4 akademik yılın (2021, 2022, 2023, 2024) çarpımına eşittir. Veri setinde hem kategorik hem de sayısal değişkenler bulunmaktadır. `Egitim_Alani` kategorik bir değişken, `Yil` sıralı sayısal/kategorik bir değişken, `Beyin_Gocu_Orani` ise sürekli sayısal bir değişkendir ve yüzde (%) cinsindendir.
+
+```{r}
+#| label: veri-yapi-boyut
+
+str(veri_alanlar)
+
+dim(veri_alanlar)
+
+summary(veri_alanlar)
+```
+
+```{r}
+#| label: veri-genel-tablo
+
+veri_alanlar %>%
+  summarise(
+    Gozlem_Sayisi = n(),
+    Alan_Sayisi = n_distinct(Egitim_Alani),
+    Yil_Sayisi = n_distinct(Yil),
+    Genel_Ortalama_Yuzde = round(mean(Beyin_Gocu_Orani), 2),
+    En_Dusuk_Yuzde = round(min(Beyin_Gocu_Orani), 2),
+    En_Yuksek_Yuzde = round(max(Beyin_Gocu_Orani), 2)
+  ) %>%
+  kable(caption = "Ana veri setinin genel özet istatistikleri")
+```
+
+## Tercih Sebebi
+
+Beyin göçü, Türkiye'nin son yıllarda en çok tartışılan toplumsal ve ekonomik konularından biridir. Özellikle bilişim ve mühendislik gibi nitelikli iş gücünün yoğun olarak yetiştirildiği alanlarda yurt dışına çıkışların artması, hem üniversiteler hem politika yapıcılar açısından önem taşımaktadır. TÜİK'in bu veri setini ilk kez 2024 yılında yayımlamış olması, konunun resmi düzeyde de ciddiyetle ele alındığını göstermektedir.
+
+Bu veri setinin tercih edilmesinin temel nedenleri şunlardır: birincisi, açık erişimli ve resmi bir kaynaktan (TÜİK) sağlanması, çalışmanın güvenilirliğini artırmaktadır. İkincisi, veri seti farklı boyutları (alan, cinsiyet, üniversite türü, ülke, dil) bir arada sunduğu için zengin bir analiz çerçevesi sağlamaktadır. Üçüncüsü, eğitim alanları arasındaki büyük farklar (örneğin bilişim alanında %6,7, eğitim alanında %0,7) çarpıcı bir karşılaştırma fırsatı sunmaktadır. Son olarak, veri yıllık olarak güncellendiği için trend analizine de imkan vermektedir.
+
+```{r}
+#| label: alan-bazinda-ozet
+
+alan_ortalama %>%
+  rename(
+    `Eğitim Alanı` = Egitim_Alani,
+    `Ortalama Oran (%)` = Ortalama_Oran,
+    `Min Oran (%)` = Min_Oran,
+    `Max Oran (%)` = Max_Oran
+  ) %>%
+  kable(digits = 2,
+        caption = "Eğitim alanlarına göre 2021-2024 dönemi özet istatistikleri")
+```
+
+## Ön İşleme
+
+TÜİK'in orijinal Excel çıktısı, üst kısımda meta veri (gözlem sıklığı, coğrafi kapsam) ve yıl başlıkları içeren, R için doğrudan kullanılmaya uygun olmayan geniş (wide) formatta bir tablodur. Analize başlamadan önce veri seti R ortamı için uzun (long) formata dönüştürülmüştür. Bu işlemde her satır artık tek bir gözlemi (bir eğitim alanının belirli bir yıldaki beyin göçü oranını) temsil edecek şekilde yeniden düzenlenmiştir. Bu dönüşüm `tidyverse` ilkelerine uygun olarak yapılmış ve grafiklerde kategoriler kolaylıkla `aes()` içine yerleştirilebilir hale gelmiştir.
+
+İkinci olarak, kullanılan tüm veri setlerinin kolon adları Türkçe karakter (ı, ğ, ü, ş, ö, ç) içermeyecek şekilde sadeleştirilmiştir; çünkü Türkçe karakterler farklı işletim sistemleri arasında kodlama sorunları (encoding) çıkarabilmektedir. Bu sayede dosya hem Windows hem de Linux/Mac üzerinde sorunsuz çalışabilmektedir. Üçüncü olarak, `Yil` değişkeni hem `integer` (modelleme için) hem de `factor` (grafiklerde sıralı eksen için) olarak ayrı ayrı saklanmıştır.
+
+```{r}
+#| label: eksik-veri-kontrol
+
+veri_alanlar %>%
+  summarise(
+    Eksik_Yil = sum(is.na(Yil)),
+    Eksik_Alan = sum(is.na(Egitim_Alani)),
+    Eksik_Oran = sum(is.na(Beyin_Gocu_Orani))
+  ) %>%
+  kable(caption = "Ana veri setinde eksik (NA) değer kontrolü")
+```
+
+```{r}
+#| label: temizlenmis-veri-gosterimi
+
+veri_alanlar %>%
+  filter(Egitim_Alani == "Bilisim ve iletisim teknolojileri") %>%
+  kable(caption = "Bilişim alanı için temizlenmiş veri (uzun format örneği)")
+```
+
+# Analiz
+
+Bu bölümde veri seti farklı açılardan incelenmiştir. Önce keşifsel veri analizi (EDA) yapılmış; alanlar arası farklılıklar, yıllar arası değişimler ve cinsiyet/üniversite türü gibi alt grup karşılaştırmaları görselleştirilmiştir. Daha sonra yıllar arası trend analizi yapılmış; hangi alanlarda artış, hangilerinde azalış olduğu belirlenmiştir. Son olarak basit doğrusal regresyon modelleri ile eğilim katsayıları hesaplanmıştır.
+
+```{r}
+#| label: yillik-ortalama-tablo
+
+yillik_ortalama %>%
+  rename(`Yıl` = Yil, `Ortalama Oran (%)` = Ortalama_Oran) %>%
+  kable(digits = 3,
+        caption = "Yıllara göre 10 alanın ortalama beyin göçü oranı")
+```
+
+## Keşifsel Veri Analizi
+
+Bu bölümde veri grafikler aracılığıyla görsel olarak incelenmiştir. Her grafik kendi başına bir alt soruyu yanıtlamayı amaçlamaktadır.
+
+### Eğitim Alanlarına Göre Beyin Göçü Oranı (Yıllara Göre)
+
+Aşağıdaki çizgi grafiği, 10 farklı eğitim alanının 2021-2024 dönemindeki beyin göçü oranlarını birlikte göstermektedir. Bu grafik, alanlar arasındaki farkın ne kadar büyük olduğunu ortaya koymakta ve aynı zamanda yıllar içindeki değişimi de görselleştirmektedir.
+
+```{r}
+#| label: grafik-alan-cizgi
+#| fig-width: 11
+#| fig-height: 6
+
+ggplot(veri_alanlar,
+       aes(x = Yil, y = Beyin_Gocu_Orani, color = Egitim_Alani, group = Egitim_Alani)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 2021:2024) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
   labs(
-    title = "Eğitim Alanlarına Göre Beyin Göçü",
-    x = "",
+    title = "Eğitim Alanlarına Göre Beyin Göçü Oranı (2021-2024)",
+    x = "Yıl",
+    y = "Beyin Göçü Oranı (%)",
+    color = "Eğitim Alanı"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right",
+        legend.text = element_text(size = 8))
+```
+
+Grafik incelendiğinde, bilişim ve iletişim teknolojileri alanının diğer tüm alanlardan belirgin biçimde ayrıştığı görülmektedir. Bu alan dört yıl boyunca %6,7 ile %7,3 arasında değerler almıştır; yani her 100 mezundan yaklaşık 7'si yurt dışında uzun süreli ikamet etmektedir. Mühendislik, imalat ve inşaat ikinci sırada (%4,4-4,6) yer almakta; doğa bilimleri ise üçüncü grubu oluşturmaktadır (%2,5-2,7). Eğitim, sağlık ve tarım alanlarının ise %1'in altında kalan oranlarla en az göç veren alanlar olduğu görülmektedir. Yıllar içinde dramatik bir değişim gözlenmemektedir, ancak bilişim alanında hafif bir azalış, doğa bilimlerinde ise hafif bir artış dikkat çekicidir.
+
+### 2024 Yılında Eğitim Alanlarının Sıralaması
+
+Aşağıdaki yatay sütun grafiği, en güncel yıl olan 2024 verileri üzerinden alanların sıralanmasını göstermektedir.
+
+```{r}
+#| label: grafik-2024-siralama
+#| fig-width: 10
+#| fig-height: 6
+
+veri_alanlar %>%
+  filter(Yil == 2024) %>%
+  ggplot(aes(x = reorder(Egitim_Alani, Beyin_Gocu_Orani), y = Beyin_Gocu_Orani)) +
+  geom_col(fill = "#2E86AB") +
+  geom_text(aes(label = paste0(round(Beyin_Gocu_Orani, 1), "%")),
+            hjust = -0.1, size = 3.5) +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 8)) +
+  labs(
+    title = "2024 Yılı Beyin Göçü Oranı (Eğitim Alanına Göre)",
+    x = "Eğitim Alanı",
     y = "Beyin Göçü Oranı (%)"
   ) +
-
-  theme_minimal() +
-
-  theme(
-    legend.position = "none",
-    plot.title = element_text(face = "bold")
-  )
-
-print(p1)
-
-# ------------------------------------------------------------------------------
-# 6. TREND GRAFİĞİ
-# ------------------------------------------------------------------------------
-
-p2 <- df_long |>
-
-  mutate(
-    alan_kisa = forcats::fct_reorder(alan_kisa, -oran, mean)
-  ) |>
-
-  ggplot(
-    aes(
-      x = yil,
-      y = oran,
-      color = alan_kisa,
-      group = alan_kisa
-    )
-  ) +
-
-  geom_line(linewidth = 1.2) +
-
-  geom_point(size = 3) +
-
-  geom_label_repel(
-    data = df_long |> filter(yil == 2024),
-    aes(label = alan_kisa),
-    show.legend = FALSE
-  ) +
-
-  scale_x_continuous(
-    breaks = 2021:2024
-  ) +
-
-  scale_color_viridis_d(option = "turbo") +
-
-  labs(
-    title = "2021-2024 Beyin Göçü Trendleri",
-    x = "Yıl",
-    y = "Oran (%)"
-  ) +
-
-  theme_minimal() +
-
-  theme(
-    plot.title = element_text(face = "bold")
-  )
-
-print(p2)
-
-# ------------------------------------------------------------------------------
-# 7. 2024 BAR GRAFİĞİ
-# ------------------------------------------------------------------------------
-
-p3 <- df_long |>
-
-  filter(yil == 2024) |>
-
-  mutate(
-    alan_kisa = forcats::fct_reorder(alan_kisa, oran)
-  ) |>
-
-  ggplot(
-    aes(
-      x = alan_kisa,
-      y = oran,
-      fill = oran
-    )
-  ) +
-
-  geom_col(width = 0.7) +
-
-  geom_text(
-    aes(label = round(oran, 2)),
-    hjust = -0.1
-  ) +
-
-  coord_flip() +
-
-  scale_fill_gradient(
-    low = "lightblue",
-    high = "darkred"
-  ) +
-
-  labs(
-    title = "2024 Beyin Göçü Oranları",
-    x = "",
-    y = "Oran (%)"
-  ) +
-
-  theme_minimal() +
-
-  theme(
-    plot.title = element_text(face = "bold"),
-    legend.position = "none"
-  )
-
-print(p3)
-
-# ------------------------------------------------------------------------------
-# 8. ISI HARİTASI
-# ------------------------------------------------------------------------------
-
-p4 <- df_long |>
-
-  ggplot(
-    aes(
-      x = factor(yil),
-      y = alan_kisa,
-      fill = oran
-    )
-  ) +
-
-  geom_tile(color = "white") +
-
-  geom_text(
-    aes(label = round(oran, 2)),
-    size = 3
-  ) +
-
-  scale_fill_gradient2(
-    low = "#ffffcc",
-    mid = "#fd8d3c",
-    high = "#800026",
-    midpoint = mean(df_long$oran, na.rm = TRUE)
-  ) +
-
-  labs(
-    title = "Beyin Göçü Isı Haritası",
-    x = "Yıl",
-    y = ""
-  ) +
-
-  theme_minimal() +
-
-  theme(
-    plot.title = element_text(face = "bold")
-  )
-
-print(p4)
-
-# ------------------------------------------------------------------------------
-# 9. İNTERAKTİF GRAFİK
-# ------------------------------------------------------------------------------
-
-p5 <- ggplot(
-  df_long,
-  aes(
-    x = yil,
-    y = oran,
-    color = alan_kisa,
-    group = alan_kisa,
-    text = paste(
-      "Alan:", alan_kisa,
-      "<br>Yıl:", yil,
-      "<br>Oran:", round(oran, 2)
-    )
-  )
-) +
-
-  geom_line() +
-  geom_point(size = 3) +
-
   theme_minimal()
-
-ggplotly(p5, tooltip = "text")
-
-# ------------------------------------------------------------------------------
-# 10. DEĞİŞİM ANALİZİ
-# ------------------------------------------------------------------------------
-
-degisim <- df_wide |>
-
-  mutate(
-    degisim_pp = `2024` - `2021`
-  ) |>
-
-  arrange(desc(degisim_pp))
-
-print(degisim)
-
-# ------------------------------------------------------------------------------
-# 11. ÖZET BULGULAR
-# ------------------------------------------------------------------------------
-
-cat("\n=========================================\n")
-
-cat("EN YÜKSEK 2024 ORANI:\n")
-
-df_long |>
-  filter(yil == 2024) |>
-  slice_max(oran, n = 1) |>
-  select(alan_kisa, oran) |>
-  print()
-
-cat("\nEN DÜŞÜK 2024 ORANI:\n")
-
-df_long |>
-  filter(yil == 2024) |>
-  slice_min(oran, n = 1) |>
-  select(alan_kisa, oran) |>
-  print()
-
-cat("\nGENEL ORTALAMA:\n")
-
-print(mean(df_long$oran, na.rm = TRUE))
-
-cat("\nAnaliz tamamlandı\n")
-
-cat("\n=========================================\
 ```
+
+2024 yılı sıralaması, 2021-2024 dönemindeki genel eğilimle uyumludur. Bilişim ve iletişim teknolojileri %6,7 ile ilk sırada yer almakta; mühendislik (%4,4) ve doğa bilimleri (%2,7) onu izlemektedir. Eğitim fakültesi mezunları yalnızca %0,7 oranıyla en az göç veren grubu oluşturmaktadır. Bu sıralama, küresel iş gücü piyasasında STEM (Bilim, Teknoloji, Mühendislik, Matematik) alanlarına yönelik talebin yüksek olmasıyla doğrudan ilişkilidir; çünkü bu alanlarda diploma uluslararası transfer edilebilir niteliktedir ve dil engeli görece daha düşüktür.
+
+### Alan ve Yıl Bazında Isı Haritası
+
+Aşağıdaki ısı haritası, alan ve yıl kombinasyonlarındaki beyin göçü oranlarını görsel olarak özetlemektedir.
+
+```{r}
+#| label: grafik-isi-haritasi
+#| fig-width: 10
+#| fig-height: 6
+
+veri_alanlar %>%
+  ggplot(aes(x = factor(Yil), y = reorder(Egitim_Alani, Beyin_Gocu_Orani),
+             fill = Beyin_Gocu_Orani)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = paste0(round(Beyin_Gocu_Orani, 1), "%")),
+            color = "black", size = 3.5) +
+  scale_fill_gradient(low = "#D9EAF7", high = "#A23B72",
+                      labels = function(x) paste0(x, "%")) +
+  labs(
+    title = "Eğitim Alanı ve Yıl Bazında Beyin Göçü Oranı (Isı Haritası)",
+    x = "Yıl",
+    y = "Eğitim Alanı",
+    fill = "Oran (%)"
+  ) +
+  theme_minimal()
+```
+
+Isı haritası, koyu renklerin (mor) yüksek göç oranlarını temsil ettiği bir görsel sunmaktadır. Görselden anlaşıldığı üzere, bilişim alanı dört yıl boyunca en koyu renge sahip satırdır; eğitim, sağlık ve tarım ise sürekli olarak en açık renklerle temsil edilmektedir. Bu görsel, sayısal verilerin tek bakışta bütüncül olarak değerlendirilmesini sağlamaktadır.
+
+### Cinsiyete Göre Beyin Göçü Karşılaştırması
+
+Aşağıdaki grafik, kadın, erkek ve genel beyin göçü oranlarını yıllara göre karşılaştırmaktadır.
+
+```{r}
+#| label: grafik-cinsiyet
+#| fig-width: 9
+#| fig-height: 5
+
+veri_cinsiyet %>%
+  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani, color = Cinsiyet, group = Cinsiyet)) +
+  geom_line(linewidth = 1.3) +
+  geom_point(size = 3.5) +
+  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
+            vjust = -1, size = 3.2, show.legend = FALSE) +
+  scale_x_continuous(breaks = 2021:2024) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(1.2, 2.8)) +
+  scale_color_manual(values = c("Genel" = "#666666",
+                                "Kadin" = "#E63946",
+                                "Erkek" = "#1D3557")) +
+  labs(
+    title = "Cinsiyete Göre Beyin Göçü Oranı (2021-2024)",
+    x = "Yıl",
+    y = "Beyin Göçü Oranı (%)",
+    color = "Grup"
+  ) +
+  theme_minimal()
+```
+
+Cinsiyet karşılaştırması belirgin bir farkı ortaya koymaktadır: erkeklerde beyin göçü oranı (%2,3-2,4) kadınlardan (%1,6) yaklaşık 0,8 puan daha yüksektir. Bu fark dört yıl boyunca neredeyse hiç değişmemiştir. Erkeklerin yurt dışı göçe daha fazla yönelmesinin temel nedeni, beyin göçünün yoğunlaştığı alanların (bilişim, mühendislik, doğa bilimleri) erkek mezun ağırlıklı olması ve bu alanlarda küresel iş gücü piyasasının talebinin yüksek olmasıdır. Ayrıca toplumsal cinsiyet rollerinin de bu farkı etkilediği literatürde sıkça dile getirilmektedir.
+
+### Üniversite Türüne Göre Beyin Göçü
+
+Aşağıdaki grafik, devlet ve vakıf üniversitesi mezunları ile vakıf üniversitelerinin burs durumuna göre alt gruplarını karşılaştırmaktadır.
+
+```{r}
+#| label: grafik-universite
+#| fig-width: 10
+#| fig-height: 5.5
+
+veri_universite %>%
+  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani,
+             color = Universite_Turu, group = Universite_Turu)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = 2021:2024) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 10)) +
+  labs(
+    title = "Üniversite Türü ve Burs Durumuna Göre Beyin Göçü Oranı",
+    x = "Yıl",
+    y = "Beyin Göçü Oranı (%)",
+    color = "Grup"
+  ) +
+  theme_minimal()
+```
+
+Üniversite türü değişkeni belki de en çarpıcı farklılaşmayı ortaya koymaktadır. Devlet üniversitesi mezunlarında oran sabit biçimde %1,7 düzeyinde seyrederken, vakıf üniversitesi mezunlarında bu oran %4,3-4,6 aralığındadır; yani vakıf mezunları devlet mezunlarına göre yaklaşık 2,5 kat daha yüksek bir oranda yurt dışına göç etmektedir. Daha da çarpıcı olan, vakıf üniversitelerinde **tam burslu** okuyan öğrencilerin göç oranının %8,3-8,6 düzeyinde olmasıdır. Bu durum, vakıf üniversitelerinin tam burslu kontenjanlarına yüksek puanla giren, akademik olarak başarılı öğrencilerin yurt dışı kariyer fırsatlarını daha yoğun değerlendirdiğini düşündürmektedir.
+
+### Göç Edilen Ülkelere Göre Dağılım
+
+Aşağıdaki sütun grafiği, mezunların yurt dışı tercihlerini ülke bazında göstermektedir.
+
+```{r}
+#| label: grafik-ulke
+#| fig-width: 10
+#| fig-height: 5.5
+
+veri_ulke %>%
+  ggplot(aes(x = reorder(Ulke, Pay_Yuzdesi), y = Pay_Yuzdesi, fill = factor(Yil))) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(Pay_Yuzdesi, "%")),
+            position = position_dodge(width = 0.9),
+            hjust = -0.1, size = 3) +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 25)) +
+  scale_fill_manual(values = c("2023" = "#264653", "2024" = "#E76F51")) +
+  labs(
+    title = "Göç Edilen İlk 5 Ülke (2023 vs 2024)",
+    x = "Ülke",
+    y = "Mezun Payı (%)",
+    fill = "Yıl"
+  ) +
+  theme_minimal()
+```
+
+Mezunların tercih ettiği ülkeler sıralamasında ABD birinci sıradadır; ancak 2023'ten 2024'e geçişte ABD'nin payı %21,4'ten %19,6'ya düşerken, Almanya'nın payı %17,5'ten %19,4'e yükselmiştir. Bu durum, ABD'ye vize alma süreçlerinin son yıllarda zorlaşması ve Almanya'nın özellikle bilişim ve mühendislik alanlarında nitelikli iş gücüne yönelik kapılarını açan vize politikaları ile açıklanabilir. Birleşik Krallık, Hollanda ve Kanada görece istikrarlı paylara sahiptir.
+
+### Eğitim Diline Göre Beyin Göçü
+
+Aşağıdaki grafik, eğitim diline göre 2024 yılı beyin göçü oranını göstermektedir. TÜİK'in bu alt-değişkeni yalnızca 2024 için ayrıntılı raporladığı için tek yıl gösterilmiştir.
+
+```{r}
+#| label: grafik-dil
+#| fig-width: 9
+#| fig-height: 5
+
+veri_dil %>%
+  ggplot(aes(x = reorder(Egitim_Dili, Beyin_Gocu_Orani), y = Beyin_Gocu_Orani)) +
+  geom_col(fill = "#F4A261") +
+  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
+            hjust = -0.2, size = 4) +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 12)) +
+  labs(
+    title = "Eğitim Diline Göre Beyin Göçü Oranı (2024)",
+    x = "Eğitim Dili",
+    y = "Beyin Göçü Oranı (%)"
+  ) +
+  theme_minimal()
+```
+
+Eğitim dili bazlı analiz oldukça ilgi çekicidir. Türkiye'de Fransızca eğitim alan mezunların beyin göçü oranı %9,9 ile diğer tüm gruplardan açık ara yüksektir. Bunu İngilizce (%6,2), Almanca (%5,9) ve Rusça (%4,7) eğitim alanlar takip etmektedir. Türkçe eğitim alanlar ise %1,5 ile en düşük orana sahiptir. Bu durum, yabancı dilde eğitim alan mezunların hem dil yetkinlikleri hem de uluslararası akademik ağlara erişim kolaylıkları sayesinde yurt dışı kariyere daha kolay yöneldiğini göstermektedir.
+
+### Lisans Bölümü Bazında En Yüksek Beyin Göçü
+
+Aşağıdaki tablo ve grafik, bölüm bazında en yüksek beyin göçü oranına sahip lisans programlarını göstermektedir. Bu detay, alan ortalamalarının arkasında çok daha yüksek oranlar olduğunu açığa çıkarmaktadır.
+
+```{r}
+#| label: grafik-bolum
+#| fig-width: 11
+#| fig-height: 6
+
+veri_bolum %>%
+  ggplot(aes(x = reorder(Bolum, Beyin_Gocu_Orani),
+             y = Beyin_Gocu_Orani, fill = factor(Yil))) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
+            position = position_dodge(width = 0.9),
+            hjust = -0.1, size = 3) +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 22)) +
+  scale_fill_manual(values = c("2023" = "#2A9D8F", "2024" = "#E9C46A")) +
+  labs(
+    title = "En Yüksek Beyin Göçü Oranına Sahip Lisans Bölümleri",
+    x = "Bölüm",
+    y = "Beyin Göçü Oranı (%)",
+    fill = "Yıl"
+  ) +
+  theme_minimal()
+```
+
+Bölüm bazında bakıldığında, **moleküler biyoloji ve genetik** mezunlarının %15-18 gibi çok yüksek bir oranla yurt dışına gittiği görülmektedir. Bu, her 6-7 mezundan birinin yurt dışında olduğu anlamına gelmektedir. Bu durum, Türkiye'de moleküler biyoloji ve genetik alanında akademik kariyer ve araştırma altyapısının yetersiz olmasıyla ilişkilendirilmektedir. Ayrıca işletme mühendisliği, elektronik mühendisliği, matematik mühendisliği ve biyomühendislik gibi disiplinler arası mühendislik dalları da %9 üzerinde oranlarla dikkat çekmektedir. 2023'ten 2024'e moleküler biyoloji ve genetikteki oranın %17,9'dan %15,0'a düşmesi olumlu bir gelişme olarak yorumlanabilir; ancak hala kabul edilemez düzeyde yüksektir.
+
+### Eğitim Alanı Bazında Oran Dağılımı (Boxplot)
+
+Aşağıdaki boxplot grafiği, her bir eğitim alanının 4 yıllık değerlerinin değişkenliğini göstermektedir.
+
+```{r}
+#| label: grafik-boxplot
+#| fig-width: 10
+#| fig-height: 6
+
+veri_alanlar %>%
+  ggplot(aes(x = reorder(Egitim_Alani, Beyin_Gocu_Orani, FUN = median),
+             y = Beyin_Gocu_Orani, fill = Egitim_Alani)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.1, size = 1.5, alpha = 0.6) +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  labs(
+    title = "Eğitim Alanı Bazında Beyin Göçü Oranı Dağılımı (2021-2024)",
+    x = "Eğitim Alanı",
+    y = "Beyin Göçü Oranı (%)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Boxplot, alanlar arası değişkenliğin de küçük olduğunu ortaya koymaktadır; yani her alan kendi içinde yıllar arasında nispeten istikrarlı oranlara sahiptir. Bilişim alanının kutusu görece geniştir; bu da bu alanda yıllar arasında daha fazla dalgalanma olduğunu göstermektedir. Buna karşılık eğitim ve sağlık alanları çok dar kutulara sahiptir; bu alanlardaki göç oranları yıllar içinde neredeyse hiç değişmemektedir.
+
+## Trend Analizi
+
+Bu bölümde her bir eğitim alanı için 4 yıllık dönem boyunca nasıl bir trend gözlendiği analiz edilmiştir. 2021'den 2024'e değişim oranları aşağıda hesaplanmıştır.
+
+```{r}
+#| label: trend-degisim
+
+trend_tablo <- veri_alanlar %>%
+  filter(Yil %in% c(2021, 2024)) %>%
+  pivot_wider(names_from = Yil, values_from = Beyin_Gocu_Orani,
+              names_prefix = "Yil_") %>%
+  mutate(
+    Mutlak_Degisim = round(Yil_2024 - Yil_2021, 2),
+    Yuzde_Degisim = round((Yil_2024 - Yil_2021) / Yil_2021 * 100, 2),
+    Yon = case_when(
+      Mutlak_Degisim > 0.05 ~ "Artis",
+      Mutlak_Degisim < -0.05 ~ "Azalis",
+      TRUE ~ "Sabit"
+    )
+  ) %>%
+  arrange(desc(Mutlak_Degisim))
+
+trend_tablo %>%
+  rename(
+    `Eğitim Alanı` = Egitim_Alani,
+    `2021 (%)` = Yil_2021,
+    `2024 (%)` = Yil_2024,
+    `Mutlak Değişim (puan)` = Mutlak_Degisim,
+    `Yüzde Değişim (%)` = Yuzde_Degisim,
+    `Yön` = Yon
+  ) %>%
+  kable(caption = "2021'den 2024'e Eğitim Alanı Bazında Değişim Analizi")
+```
+
+```{r}
+#| label: grafik-trend-degisim
+#| fig-width: 10
+#| fig-height: 5.5
+
+trend_tablo %>%
+  ggplot(aes(x = reorder(Egitim_Alani, Mutlak_Degisim),
+             y = Mutlak_Degisim, fill = Yon)) +
+  geom_col() +
+  geom_text(aes(label = sprintf("%+.2f", Mutlak_Degisim)),
+            hjust = ifelse(trend_tablo$Mutlak_Degisim >= 0, -0.1, 1.1),
+            size = 3.5) +
+  coord_flip() +
+  scale_fill_manual(values = c("Artis" = "#E63946",
+                               "Azalis" = "#06A77D",
+                               "Sabit" = "#888888")) +
+  labs(
+    title = "2021-2024 Döneminde Beyin Göçü Oranı Değişimi (Mutlak Puan)",
+    subtitle = "Pozitif değerler artışı, negatif değerler azalışı gösterir",
+    x = "Eğitim Alanı",
+    y = "2024 - 2021 (puan)",
+    fill = "Yön"
+  ) +
+  theme_minimal()
+```
+
+Trend analizi şu önemli bulguları ortaya koymaktadır: **Bilişim ve iletişim teknolojileri** alanında 4 yıl içinde 0,39 puanlık bir **azalış** olmuştur (%7,09'dan %6,70'e). Mühendislik alanında da küçük bir azalış vardır. Buna karşılık **doğa bilimleri, matematik ve istatistik** alanında 0,18 puanlık bir **artış** ve **sağlık ve refah** alanında 0,07 puanlık küçük bir artış gözlenmiştir. Eğitim ve hizmetler alanlarındaki değişim ihmal edilebilir düzeydedir. Bilişim alanındaki azalış olumlu bir sinyal olarak değerlendirilebilir; ancak hala mutlak değer olarak %6,70 oranı oldukça yüksektir.
+
+## Model Uydurma
+
+Bu bölümde her eğitim alanı için ayrı bir basit doğrusal regresyon modeli kurulmuştur. Modelin matematiksel formu şu şekildedir:
+
+$$\text{Beyin Göçü Oranı}_i = \beta_0 + \beta_1 \cdot \text{Yıl}_i + \varepsilon_i$$
+
+Burada $\beta_1$ katsayısı, yıllık ortalama değişimi puan cinsinden vermektedir. Pozitif $\beta_1$ artış eğilimini, negatif $\beta_1$ ise azalış eğilimini temsil eder. Modeller `lm()` fonksiyonu ile fit edilmiş, sonuçlar `broom::tidy()` ile düzenli (tidy) bir tabloya dönüştürülmüştür.
+
+```{r}
+#| label: model-fit
+
+model_sonuclari <- veri_alanlar %>%
+  group_by(Egitim_Alani) %>%
+  do(tidy(lm(Beyin_Gocu_Orani ~ Yil, data = .))) %>%
+  ungroup()
+
+egilim_tablosu <- model_sonuclari %>%
+  filter(term == "Yil") %>%
+  select(Egitim_Alani, estimate, std.error, statistic, p.value) %>%
+  mutate(
+    Anlamlilik = case_when(
+      p.value < 0.05 ~ "Anlamli (p<0.05)",
+      p.value < 0.10 ~ "Marjinal (p<0.10)",
+      TRUE ~ "Anlamsiz"
+    )
+  ) %>%
+  arrange(estimate) %>%
+  rename(
+    `Eğitim Alanı` = Egitim_Alani,
+    `Eğilim Katsayısı (β₁)` = estimate,
+    `Standart Hata` = std.error,
+    `t Değeri` = statistic,
+    `p Değeri` = p.value,
+    `Anlamlılık` = Anlamlilik
+  )
+
+egilim_tablosu %>%
+  kable(digits = 4,
+        caption = "Eğitim alanı bazında doğrusal trend modeli sonuçları")
+```
+
+Model sonuçlarına göre **bilişim ve iletişim teknolojileri** alanı en negatif eğilim katsayısına sahiptir (yaklaşık -0,14 puan/yıl); yani bu alanda yıllık ortalama 0,14 puan azalış vardır. **Mühendislik** alanında da küçük negatif eğilim mevcuttur. **Doğa bilimleri** ise yaklaşık +0,06 puan/yıl pozitif eğilime sahiptir. Ancak veri yalnızca 4 yıllık olduğundan, modellerin standart hataları görece büyüktür ve çoğu katsayı istatistiksel olarak %95 güven düzeyinde anlamlı çıkmamıştır. Bu nedenle model sonuçları kesin tahminler olarak değil, gözlemlenen eğilimleri destekleyici tanımlayıcı analizler olarak yorumlanmalıdır.
+
+Aşağıdaki grafik, her alan için gözlenen verileri ve fit edilen doğrusal trendi birlikte göstermektedir.
+
+```{r}
+#| label: grafik-model-fit
+#| fig-width: 12
+#| fig-height: 7
+
+veri_alanlar %>%
+  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani)) +
+  geom_point(size = 2, color = "#264653") +
+  geom_smooth(method = "lm", se = TRUE, color = "#E76F51", fill = "#F4A261", alpha = 0.3) +
+  facet_wrap(~ Egitim_Alani, scales = "free_y", ncol = 4) +
+  scale_x_continuous(breaks = c(2021, 2023)) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  labs(
+    title = "Eğitim Alanı Bazında Doğrusal Trend Modeli",
+    subtitle = "Gri bant: %95 güven aralığı",
+    x = "Yıl",
+    y = "Beyin Göçü Oranı (%)"
+  ) +
+  theme_minimal() +
+  theme(strip.text = element_text(size = 8))
+```
+
+Yukarıdaki facet grafiği, her alanın trend çizgisini ayrı bir alt panel olarak göstermektedir. Bilişim, mühendislik ve iş-yönetim-hukuk alanlarında belirgin azalış eğilimleri (negatif eğim) görülürken; doğa bilimleri ve sağlık alanlarında artış eğilimleri (pozitif eğim) görülmektedir. Eğitim alanında ise eğim yatay denecek kadar küçüktür.
+
+# Sonuçlar ve Ana Çıkarımlar
+
+Bu projede Türkiye İstatistik Kurumu'nun yayımladığı Yükseköğretim Beyin Göçü İstatistikleri kullanılarak, 2021-2024 dönemindeki beyin göçü oranları farklı boyutlarıyla incelenmiştir. Analizden elde edilen başlıca bulgular şu şekilde özetlenebilir:
+
+**Birincisi, eğitim alanları arasında muazzam bir farklılık vardır.** Bilişim ve iletişim teknolojileri (%6,7), eğitim (%0,7) alanına göre yaklaşık 10 kat daha yüksek bir beyin göçü oranına sahiptir. Bu büyük fark, alan ortalamalarını değerlendirirken dikkatli olunması gerektiğini, "Türkiye'de beyin göçü %2'dir" ifadesinin alanlar arasında çok büyük heterojenlikleri gizlediğini göstermektedir. STEM alanlarında oran açık ara yüksektir.
+
+**İkincisi, cinsiyetler arası fark süreğen ve belirgindir.** Erkeklerde %2,4 olan oran kadınlarda %1,6'da kalmaktadır. Bu farkın temel nedeni, beyin göçünün yoğun olduğu alanların (bilişim, mühendislik) erkek ağırlıklı bölümler olmasıdır. Ancak literatürdeki sosyolojik çalışmalar, kadınlar arasında da yurt dışı kariyer ilgisinin son yıllarda hızla arttığını ve farkın kapanmakta olduğunu ortaya koymaktadır.
+
+**Üçüncüsü, vakıf-devlet üniversitesi farkı çok büyüktür.** Vakıf üniversitesi mezunları (%4,3) devlet mezunlarına (%1,7) göre 2,5 kat daha yüksek oranda göç etmektedir. Vakıf üniversitelerinin tam burslu öğrencilerinde bu oran %8,3'e çıkmaktadır. Bu, akademik olarak en başarılı öğrencilerin yurt dışına yöneldiğini, ülkenin yetiştirdiği en nitelikli öğrencilerin gitme eğiliminde olduğunu göstermektedir.
+
+**Dördüncüsü, mezunların tercih ettiği ülkelerde değişim vardır.** 2023'te ABD birinci sıradayken (%21,4), 2024'te aradaki fark belirgin biçimde azalmış ve Almanya (%19,4) ABD'ye (%19,6) çok yaklaşmıştır. Bu değişim, ABD'nin vize politikalarının sıkılaşması ve Almanya'nın nitelikli iş gücü çekme stratejileri ile ilişkilendirilmektedir.
+
+**Beşincisi, eğitim dili belirleyici bir faktördür.** Fransızca eğitim alan mezunların beyin göçü oranı %9,9 ile en yüksektir; yani dil farkı çok önemli bir aracı değişkendir. Yabancı dilde eğitim alanlar, hem dil yetkinlikleri hem de uluslararası akademik ağlara erişim sayesinde yurt dışı kariyere daha kolay yönelmektedir.
+
+**Altıncısı, bölüm bazında veriler alan ortalamalarının ötesinde çok daha yüksek değerler ortaya koymaktadır.** Moleküler biyoloji ve genetik mezunlarının %15'i yurt dışına gitmektedir; yani bu bölümün her 6-7 mezunundan biri yurt dışındadır. İşletme mühendisliği, elektronik mühendisliği ve matematik mühendisliği de %9 üzerinde değerlerle dikkat çekmektedir.
+
+Yöntemsel olarak, fit edilen basit doğrusal modeller veri yalnızca 4 yıllık olduğu için istatistiksel olarak güçlü tahminler vermemektedir; ancak eğilim yönünü göstermek açısından faydalıdır. Daha sağlam çıkarımlar için TÜİK'in önümüzdeki yıllarda yayımlayacağı verilerle çalışmanın güncellenmesi, ayrıca panel veri analizi gibi daha gelişmiş yöntemlerin kullanılması önerilmektedir. Ayrıca TÜİK'in beyin göçü hesaplama yönteminin (mezuniyetten sonra en az 3 yıl yurt dışı kalma şartı), 2018 sonrası mezunların yansıtılmasında geç olduğu eleştirilmektedir; bu nedenle son yılların gerçek beyin göçü oranlarının resmi rakamların üzerinde olduğu düşünülmektedir.
+
+Sonuç olarak, Türkiye'de beyin göçü; eğitim alanı, cinsiyet, üniversite türü ve eğitim diline göre büyük farklılıklar gösteren, ortalamaların ardında ciddi heterojenlikler barındıran çok boyutlu bir olgudur. Politika önerileri açısından özellikle STEM alanlarında yurt içi kariyer fırsatlarının iyileştirilmesi, akademik araştırma altyapısının güçlendirilmesi ve nitelikli iş gücüne yönelik teşviklerin artırılması kritik öneme sahiptir.
+
+```{r}
+#| label: nihai-ozet
+
+veri_alanlar %>%
+  group_by(Egitim_Alani) %>%
+  summarise(
+    `Ortalama Oran (%)` = round(mean(Beyin_Gocu_Orani), 2),
+    `2021 (%)` = round(Beyin_Gocu_Orani[Yil == 2021], 2),
+    `2024 (%)` = round(Beyin_Gocu_Orani[Yil == 2024], 2),
+    `Degisim (puan)` = round(Beyin_Gocu_Orani[Yil == 2024] - Beyin_Gocu_Orani[Yil == 2021], 2),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(`Ortalama Oran (%)`)) %>%
+  rename(`Eğitim Alanı` = Egitim_Alani) %>%
+  kable(caption = "Nihai Özet Tablo: Eğitim Alanlarına Göre 2021-2024 Beyin Göçü Oranları")
+```
+
+## Veri Kaynakları
+
+-   TÜİK, Yükseköğretim Beyin Göçü İstatistikleri, 2021-2023 (Eylül 2024)
+-   TÜİK, Yükseköğretim Beyin Göçü İstatistikleri, 2024 (Ekim 2025)
+-   Veri erişim adresi: https://data.tuik.gov.tr/
+
+## Yapay Zeka Kullanımı
+
+Bu proje hazırlanırken veri düzenleme ve görselleştirme aşamalarında üretici yapay zeka destekli araçlardan yararlanılmıştır. Kullanılan tüm istatistiksel veriler TÜİK'in resmi haber bültenlerinden alınmış olup, yorumlar ve sonuçlar proje ekibinin akademik değerlendirmesine dayanmaktadır.
