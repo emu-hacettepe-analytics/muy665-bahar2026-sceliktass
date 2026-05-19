@@ -249,7 +249,7 @@
     "href": "proje.html",
     "title": "Proje X (proje adını yazınız)",
     "section": "",
-    "text": "Proje sayfamıza hoş geldiniz.\nProjemizle ilgili güncellemelerden haberdar olmak için bu alanı takip edin.\n(Aşağıdaki başlıklar örnek olarak verilmiştir; lütfen gerektiği şekilde düzenlemekten çekinmeyin.)"
+    "text": "Projemizle ilgili güncellemelerden haberdar olmak için bu xxxxx bağlantısındaki proje sayfamızı takip edin.\n(Aşağıdaki başlıklar örnek olarak verilmiştir; lütfen gerektiği şekilde düzenlemekten çekinmeyin.)"
   },
   {
     "objectID": "proje.html#data-source",
@@ -320,11 +320,11 @@
   {
     "objectID": "portfolyo/calisma1.html",
     "href": "portfolyo/calisma1.html",
-    "title": "Çalışma 1",
+    "title": "??dev 1",
     "section": "",
-    "text": "(Aşağıdakiler örnek olarak verilmiştir.)\nBu çalışmada 3 görevimiz var. Bu görevler….. Bunlara sırayla aşağıda cevap arıyoruz.",
+    "text": "Se??ilen video “Veri Bilimi ve End??stri M??hendisli??i ??zerine Sohbetler - Baykal Haf??zo??lu & Erdi Da??demir” Videonun ??eti : Baykal Haf??zo??lu ve Erdi Da??demir???in ger??ekle??tirdi??i bu s??yle??i, End??stri M??hendisli??i (EM) disiplini ile Veri Bilimi d??nyas??n??n nas??l i?? i??e ge??ti??ini ve bu iki alan??n birbirini nas??l besledi??ini detayland??r??yor. Teknik becerilerin yan??na i?? analiti??i, sistem d??????ncesi ve sekt??rel tecr??be eklendi??inde, End??stri M??hendislerinin veri bilimi alan??nda fark yaratan liderlere d??n????ebilece??ini anlat??yor.\n##A????k U??lu Soru Videoda bahsedilenlere g??re, bir veri bilimi projesinde ‘ba??ar??’ sadece modelin y??ksek do??ruluk oran??na sahip olmas?? m??d??r? Neden? ## cevap Hay??r, modelin i??e de??er katmas?? ve uygulanabilr olmas?? gerekir.",
     "crumbs": [
-      "Çalışma 1"
+      "??dev 1"
     ]
   },
   {
@@ -585,5 +585,78 @@
     "title": "Sıla Çeliktaş Yalçınkaya",
     "section": "Çalıştığı Yerler",
     "text": "Çalıştığı Yerler\n\nENERJISA – Junior Engineer (2022)\n\nASELSAN – System Engineer (2022 – ongoing)"
+  },
+  {
+    "objectID": "docs/project.html",
+    "href": "docs/project.html",
+    "title": "Project X",
+    "section": "",
+    "text": "Welcome to my project page.\nKeep an eye on this space to stay updated with my project activities.\n(The titles below are provided as examples; please feel free to adjust them as necessary.)"
+  },
+  {
+    "objectID": "docs/project.html#data-source",
+    "href": "docs/project.html#data-source",
+    "title": "Project X",
+    "section": "2.1 Data Source",
+    "text": "2.1 Data Source\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#general-information-about-data",
+    "href": "docs/project.html#general-information-about-data",
+    "title": "Project X",
+    "section": "2.2 General Information About Data",
+    "text": "2.2 General Information About Data\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#reason-of-choice",
+    "href": "docs/project.html#reason-of-choice",
+    "title": "Project X",
+    "section": "2.3 Reason of Choice",
+    "text": "2.3 Reason of Choice\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#preprocessing",
+    "href": "docs/project.html#preprocessing",
+    "title": "Project X",
+    "section": "2.4 Preprocessing",
+    "text": "2.4 Preprocessing\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#exploratory-data-analysis",
+    "href": "docs/project.html#exploratory-data-analysis",
+    "title": "Project X",
+    "section": "3.1 Exploratory Data Analysis",
+    "text": "3.1 Exploratory Data Analysis\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#trend-analysis",
+    "href": "docs/project.html#trend-analysis",
+    "title": "Project X",
+    "section": "3.2 Trend Analysis",
+    "text": "3.2 Trend Analysis\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#model-fitting",
+    "href": "docs/project.html#model-fitting",
+    "title": "Project X",
+    "section": "3.3 Model Fitting",
+    "text": "3.3 Model Fitting\nxxxxxx"
+  },
+  {
+    "objectID": "docs/project.html#results",
+    "href": "docs/project.html#results",
+    "title": "Project X",
+    "section": "3.4 Results",
+    "text": "3.4 Results\nxxxxxx"
+  },
+  {
+    "objectID": "portfolyo/calisma1.html#oktan-semeli-soru",
+    "href": "portfolyo/calisma1.html#oktan-semeli-soru",
+    "title": "??dev 1",
+    "section": "??oktan Se??meli Soru",
+    "text": "??oktan Se??meli Soru\nBaykal Haf??zo??lu’nun sohbetinde ge??en ‘Analitik Olgunluk’ kavram?? ??irketler i??in ne ifade eder?\nA. ??irketin veriyi karar alma s??re??lerine ne kadar dahil etti??i B. ??irketin ??al????an say??s?? C. ??irketin ka?? tane bilgisayara sahip oldu??u D. ??irketin sadece en yeni yaz??l??mlar?? kullanmas??\n##CEVAP A ????kk??\nlibrary(dslabs) data(“polls_us_election_2016”)",
+    "crumbs": [
+      "??dev 1"
+    ]
   }
 ]

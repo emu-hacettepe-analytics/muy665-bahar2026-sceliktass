@@ -1,16 +1,98 @@
 ---
-title: "Çalışma 1"
+title: "calisma"
 ---
 
 \
-(Aşağıdakiler örnek olarak verilmiştir.)
 
-Bu çalışmada 3 görevimiz var. Bu görevler..... Bunlara sırayla aşağıda cevap arıyoruz.
+Se??ilen video "Veri Bilimi ve End??stri M??hendisli??i ??zerine Sohbetler - Baykal Haf??zo??lu & Erdi Da??demir"
+Videonun ??eti : Baykal Haf??zo??lu ve Erdi Da??demir???in ger??ekle??tirdi??i bu s??yle??i, End??stri M??hendisli??i (EM) disiplini ile Veri Bilimi d??nyas??n??n nas??l i?? i??e ge??ti??ini ve bu iki alan??n birbirini nas??l besledi??ini detayland??r??yor. Teknik becerilerin yan??na i?? analiti??i, sistem d??????ncesi ve sekt??rel tecr??be eklendi??inde, End??stri M??hendislerinin veri bilimi alan??nda fark yaratan liderlere d??n????ebilece??ini anlat??yor.
 
-## (a)
+##A????k U??lu Soru
+Videoda bahsedilenlere g??re, bir veri bilimi projesinde 'ba??ar??' sadece modelin y??ksek do??ruluk oran??na sahip olmas?? m??d??r? Neden?
+## cevap
+Hay??r, modelin i??e de??er katmas?? ve uygulanabilr olmas?? gerekir.
 
-```{r}
-1 + 1
-```
 
-## (b)
+## ??oktan Se??meli Soru
+Baykal Haf??zo??lu'nun sohbetinde ge??en 'Analitik Olgunluk' kavram?? ??irketler i??in ne ifade eder?
+
+
+A. ??irketin veriyi karar alma s??re??lerine ne kadar dahil etti??i
+B. ??irketin ??al????an say??s??
+C. ??irketin ka?? tane bilgisayara sahip oldu??u
+D. ??irketin sadece en yeni yaz??l??mlar?? kullanmas??
+
+##CEVAP A ????kk??
+
+
+
+
+
+---
+title: "??dev 1"
+format: html
+---
+---
+title: "??dev 1"
+format: html
+---
+
+library(dslabs)
+data("polls_us_election_2016")
+
+# 1. De??i??ken Tan??mlama
+my_first <- "S??la"        
+my_birth_year <- 1998         
+
+# 2. k De??erinin Hesaplanmas??
+k <- (nchar(my_first) + my_birth_year) %% 15 + 8
+print(paste("Hesaplanan k de??eri:", k))
+
+# 3. k Kural??na G??re Sat??r G??r??nt??leme
+if (k %% 2 == 0) {
+  # k ??ift ise ilk k sat??r
+  print(head(polls_us_election_2016, k))
+} else {
+  # k tek ise son k sat??r
+  print(tail(polls_us_election_2016, k))
+}
+
+# 4. NA (Eksik De??er) Analizi
+# Toplam NA say??s??
+total_na <- sum(is.na(polls_us_election_2016))
+print(paste("T??m veri setindeki toplam NA say??s??:", total_na))
+
+# S??tun ba????na NA say??s?? (S??ralanm???? ve ilk 8 s??tun)
+col_na_counts <- sort(colSums(is.na(polls_us_election_2016)), decreasing = TRUE)
+print("S??tun ba????na NA say??lar?? (??lk 8):")
+print(head(col_na_counts, 8))
+
+# 5. NA De??erlerini De??i??tirme
+# Orijinal veriyi bozmamak i??in kopya olu??turuyoruz
+new_data <- polls_us_election_2016
+
+for (i in 1:ncol(new_data)) {
+  if (is.numeric(new_data[[i]])) {
+    # Say??sal s??tunlar i??in: do??um y??l?? + k
+    new_data[[i]][is.na(new_data[[i]])] <- my_birth_year + k
+  } else if (is.character(new_data[[i]]) || is.factor(new_data[[i]])) {
+    # Karakter veya Fakt??r s??tunlar?? i??in: isim_k
+    # Fakt??rlerde yeni seviyeyi (level) eklemezsek hata alabiliriz
+    if (is.factor(new_data[[i]])) {
+      levels(new_data[[i]]) <- c(levels(new_data[[i]]), paste0(my_first, "_", k))
+    }
+    new_data[[i]][is.na(new_data[[i]])] <- paste0(my_first, "_", k)
+  }
+}
+
+# 6. Yeni Veri ??er??evesi ????kt??lar??
+# k kural??na g??re g??r??nt??leme
+if (k %% 2 == 0) {
+  print(head(new_data, k))
+} else {
+  print(tail(new_data, k))
+}
+
+# Kalan NA say??s?? ve do??rulama
+print(paste("Yeni veri setindeki toplam NA say??s??:", sum(is.na(new_data))))
+print(paste("anyNA sonucu:", anyNA(new_data)))
