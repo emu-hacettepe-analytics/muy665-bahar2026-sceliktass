@@ -1,1304 +1,368 @@
 ---
-title: "Proje X (proje adını yazınız)"
-number-sections: true
+
 ---
 
 ---
-title: "Fakultelere Gore Kadin ve Erkek Ogrenci Sayıları Analizi"
-author: "Hande DOLAY, Sıla YALÇINKAYA"
-format: 
-  html:
-    toc: true
-    toc-depth: 3
-    theme: cosmo
-    code-fold: true
-    code-tools: true
-editor: visual
+
 ---
 
-```{r}
-#| label: setup
-#| message: false
-#| warning: false
+```{# ==============================================================================}
+# ==============================================================================
+# MÜY665 İş Analitiği – Dönem Projesi
+# Türkiye'de Eğitim Alanına Göre Beyin Göçü Analizi
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. PAKETLER
+# ------------------------------------------------------------------------------
+
+paketler <- c(
+  "tidyverse",
+  "readxl",
+  "scales",
+  "knitr",
+  "kableExtra",
+  "ggrepel",
+  "patchwork",
+  "plotly",
+  "viridis"
+)
+
+eksik <- paketler[!paketler %in% installed.packages()[, "Package"]]
+
+if(length(eksik) > 0){
+  install.packages(eksik)
+}
 
 library(tidyverse)
 library(readxl)
 library(scales)
-library(broom)
 library(knitr)
+library(kableExtra)
+library(ggrepel)
+library(patchwork)
+library(plotly)
+library(viridis)
 
-veri <- read_excel("fakulte_cinsiyet_verisi.csv.xlsx")
+# ------------------------------------------------------------------------------
+# 2. VERİ YÜKLEME
+# ------------------------------------------------------------------------------
 
-names(veri) <- c("Yil", "Cinsiyet", "Fakulte", "Kisi_Sayisi")
+dosya <- "Eğitim ve öğretim alanlarına göre yükseköğretim mezunlarının beyin göçü oranı (TR,DF_EGITIM_OGRETIM_ALAN,1.0).xlsx"
 
-veri <- veri %>%
+ham <- read_excel(dosya, sheet = 1, col_names = FALSE)
+
+print(ham)
+
+# ------------------------------------------------------------------------------
+# 3. VERİ TEMİZLEME
+# ------------------------------------------------------------------------------
+
+alan_adlari <- ham[8:17, 1] |> pull()
+
+yil_2021 <- ham[8:17, 2] |> pull() |> as.numeric()
+yil_2022 <- ham[8:17, 3] |> pull() |> as.numeric()
+yil_2023 <- ham[8:17, 4] |> pull() |> as.numeric()
+yil_2024 <- ham[8:17, 5] |> pull() |> as.numeric()
+
+# Kısa isimler
+
+kisalt <- c(
+  "Bilişim ve iletişim teknolojileri" = "BİT",
+  "Mühendislik, imalat ve inşaat" = "Müh. & İnşaat",
+  "Doğa bilimleri, matematik ve istatistik" = "Doğa Bil. & Mat.",
+  "Hizmetler" = "Hizmetler",
+  "Sosyal bilimler, gazetecilik ve enformasyon" = "Sosyal Bil.",
+  "Sanat ve beşeri bilimler" = "Sanat & Beşeri",
+  "İş, yönetim ve hukuk" = "İş & Hukuk",
+  "Tarım, ormancılık, balıkçılık ve veterinerlik" = "Tarım & Vet.",
+  "Sağlık ve refah" = "Sağlık & Refah",
+  "Eğitim" = "Eğitim"
+)
+
+# Long format
+
+df_long <- tibble(
+  alan = rep(alan_adlari, 4),
+  yil = rep(c(2021, 2022, 2023, 2024), each = length(alan_adlari)),
+  oran = c(yil_2021, yil_2022, yil_2023, yil_2024)
+) |>
   mutate(
-    Yil = as.character(Yil),
-    Cinsiyet = as.character(Cinsiyet),
-    Fakulte = as.character(Fakulte),
-    Kisi_Sayisi = as.numeric(Kisi_Sayisi),
-    Yil = factor(
-      Yil,
-      levels = c("2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025")
-    ),
-    Cinsiyet = factor(
-      Cinsiyet,
-      levels = c("ERKEK", "KADIN", "TOPLAM")
+    alan_kisa = recode(alan, !!!kisalt)
+  )
+
+# Wide format
+
+df_wide <- tibble(
+  Alan = alan_adlari,
+  `2021` = yil_2021,
+  `2022` = yil_2022,
+  `2023` = yil_2023,
+  `2024` = yil_2024
+)
+
+cat("Veri başarıyla yüklendi\n")
+
+# ------------------------------------------------------------------------------
+# 4. TEMEL İSTATİSTİKLER
+# ------------------------------------------------------------------------------
+
+ozet <- df_long |>
+  group_by(alan_kisa) |>
+  summarise(
+    Ortalama = mean(oran, na.rm = TRUE),
+    Medyan = median(oran, na.rm = TRUE),
+    Minimum = min(oran, na.rm = TRUE),
+    Maksimum = max(oran, na.rm = TRUE),
+    Degisim = last(oran) - first(oran),
+    .groups = "drop"
+  ) |>
+  arrange(desc(Ortalama))
+
+print(ozet)
+
+# ------------------------------------------------------------------------------
+# 5. KUTU GRAFİĞİ
+# ------------------------------------------------------------------------------
+
+p1 <- df_long |>
+  mutate(alan_kisa = forcats::fct_reorder(alan_kisa, oran, median)) |>
+  ggplot(aes(x = alan_kisa, y = oran, fill = alan_kisa)) +
+
+  geom_boxplot(alpha = 0.7) +
+
+  geom_jitter(
+    width = 0.15,
+    size = 2,
+    alpha = 0.8
+  ) +
+
+  coord_flip() +
+
+  scale_fill_viridis_d(option = "plasma") +
+
+  labs(
+    title = "Eğitim Alanlarına Göre Beyin Göçü",
+    x = "",
+    y = "Beyin Göçü Oranı (%)"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold")
+  )
+
+print(p1)
+
+# ------------------------------------------------------------------------------
+# 6. TREND GRAFİĞİ
+# ------------------------------------------------------------------------------
+
+p2 <- df_long |>
+
+  mutate(
+    alan_kisa = forcats::fct_reorder(alan_kisa, -oran, mean)
+  ) |>
+
+  ggplot(
+    aes(
+      x = yil,
+      y = oran,
+      color = alan_kisa,
+      group = alan_kisa
+    )
+  ) +
+
+  geom_line(linewidth = 1.2) +
+
+  geom_point(size = 3) +
+
+  geom_label_repel(
+    data = df_long |> filter(yil == 2024),
+    aes(label = alan_kisa),
+    show.legend = FALSE
+  ) +
+
+  scale_x_continuous(
+    breaks = 2021:2024
+  ) +
+
+  scale_color_viridis_d(option = "turbo") +
+
+  labs(
+    title = "2021-2024 Beyin Göçü Trendleri",
+    x = "Yıl",
+    y = "Oran (%)"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+
+print(p2)
+
+# ------------------------------------------------------------------------------
+# 7. 2024 BAR GRAFİĞİ
+# ------------------------------------------------------------------------------
+
+p3 <- df_long |>
+
+  filter(yil == 2024) |>
+
+  mutate(
+    alan_kisa = forcats::fct_reorder(alan_kisa, oran)
+  ) |>
+
+  ggplot(
+    aes(
+      x = alan_kisa,
+      y = oran,
+      fill = oran
+    )
+  ) +
+
+  geom_col(width = 0.7) +
+
+  geom_text(
+    aes(label = round(oran, 2)),
+    hjust = -0.1
+  ) +
+
+  coord_flip() +
+
+  scale_fill_gradient(
+    low = "lightblue",
+    high = "darkred"
+  ) +
+
+  labs(
+    title = "2024 Beyin Göçü Oranları",
+    x = "",
+    y = "Oran (%)"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+print(p3)
+
+# ------------------------------------------------------------------------------
+# 8. ISI HARİTASI
+# ------------------------------------------------------------------------------
+
+p4 <- df_long |>
+
+  ggplot(
+    aes(
+      x = factor(yil),
+      y = alan_kisa,
+      fill = oran
+    )
+  ) +
+
+  geom_tile(color = "white") +
+
+  geom_text(
+    aes(label = round(oran, 2)),
+    size = 3
+  ) +
+
+  scale_fill_gradient2(
+    low = "#ffffcc",
+    mid = "#fd8d3c",
+    high = "#800026",
+    midpoint = mean(df_long$oran, na.rm = TRUE)
+  ) +
+
+  labs(
+    title = "Beyin Göçü Isı Haritası",
+    x = "Yıl",
+    y = ""
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    plot.title = element_text(face = "bold")
+  )
+
+print(p4)
+
+# ------------------------------------------------------------------------------
+# 9. İNTERAKTİF GRAFİK
+# ------------------------------------------------------------------------------
+
+p5 <- ggplot(
+  df_long,
+  aes(
+    x = yil,
+    y = oran,
+    color = alan_kisa,
+    group = alan_kisa,
+    text = paste(
+      "Alan:", alan_kisa,
+      "<br>Yıl:", yil,
+      "<br>Oran:", round(oran, 2)
     )
   )
+) +
 
-veri_cinsiyet <- veri %>%
-  filter(Cinsiyet %in% c("ERKEK", "KADIN"))
-
-veri_toplam <- veri %>%
-  filter(Cinsiyet == "TOPLAM")
-
-veri_genis <- veri %>%
-  pivot_wider(
-    names_from = Cinsiyet,
-    values_from = Kisi_Sayisi
-  ) %>%
-  rename(
-    Erkek = ERKEK,
-    Kadin = KADIN,
-    Toplam = TOPLAM
-  )
-
-oran_veri <- veri_genis %>%
-  mutate(
-    Kadin_Orani = Kadin / Toplam * 100,
-    Erkek_Orani = Erkek / Toplam * 100
-  )
-
-yillik_toplam <- veri_toplam %>%
-  group_by(Yil) %>%
-  summarise(
-    Toplam_Ogrenci = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-fakulte_toplam <- veri_toplam %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Toplam_Ogrenci = sum(Kisi_Sayisi),
-    Ortalama_Ogrenci = mean(Kisi_Sayisi),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Toplam_Ogrenci))
-
-cinsiyet_toplam <- veri_cinsiyet %>%
-  group_by(Cinsiyet) %>%
-  summarise(
-    Toplam_Sayi = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-yil_cinsiyet <- veri_cinsiyet %>%
-  group_by(Yil, Cinsiyet) %>%
-  summarise(
-    Toplam = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-fakulte_cinsiyet <- veri_cinsiyet %>%
-  group_by(Fakulte, Cinsiyet) %>%
-  summarise(
-    Toplam = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-```
-
-# Proje Genel Bakış ve Kapsamı
-
-```         
-Bu projenin amacı, seçilmiş fakültelerde öğrenim gören kadın ve erkek öğrenci sayılarını yıllara göre incelemek ve fakülte bazında cinsiyet dağılımındaki değişimleri analiz etmektir. Çalışmada Eğitim Fakültesi, İktisadi ve İdari Bilimler Fakültesi, Mühendislik Fakültesi, Sağlık Fakültesi ve Teknoloji Fakültesi ele alınmıştır.
-
-Analiz kapsamında 2020-2021 ile 2024-2025 akademik yılları arasındaki öğrenci sayıları kullanılmıştır. Veri setinde her fakülte için erkek öğrenci sayısı, kadın öğrenci sayısı ve toplam öğrenci sayısı yer almaktadır.
-
-Bu çalışmada temel amaç, fakülteler arasında öğrenci yoğunluğunu, kadın-erkek dağılımını ve yıllara göre değişimi görselleştirerek yorumlamaktır. Böylece yükseköğretimde farklı fakülte türlerine göre kadın ve erkek öğrencilerin temsil düzeyleri hakkında genel bir değerlendirme yapılması hedeflenmiştir.
-```
-
-# Veri
-
-Bu projede kullanılan veri seti, fakültelere ve akademik yıllara göre kadın ve erkek öğrenci sayılarını içermektedir. Veri setinde beş farklı fakülte ve beş akademik yıl bulunmaktadır. Her satır, belirli bir akademik yılda belirli bir fakülteye ait öğrenci sayılarını göstermektedir.\
-\
-Veri setindeki temel değişkenler şu şekildedir:\
-\
-- \*\*Yil:\*\* Akademik yılı göstermektedir.\
-- \*\*Fakulte:\*\* Öğrenci sayısının ait olduğu fakülteyi belirtmektedir.\
-- \*\*Erkek:\*\* İlgili fakültedeki erkek öğrenci sayısını göstermektedir.\
-- \*\*Kadin:\*\* İlgili fakültedeki kadın öğrenci sayısını göstermektedir.\
-- \*\*Toplam:\*\* Kadın ve erkek öğrenci sayılarının toplamını göstermektedir.\
-\
-Bu çalışmada veri seti, R ortamına \`readr\` kütüphanesinin \`read_csv()\` fonksiyonu kullanılarak klasörde yer alan CSV dosyasından aktarılmıştır.
-
-```{r}
-#| label: veri-ilk-satirlar
-
-head(veri) %>%
-  kable()
-```
-
-## Veri Kaynağı
-
-Çalışmada kullanılan veri seti, fakültelere göre kadın ve erkek öğrenci sayılarını gösteren yükseköğretim istatistikleri temel alınarak hazırlanmıştır. Proje kapsamında kullanılan değerler tablo üzerinden alınmış ve analiz yapılabilecek şekilde CSV formatında düzenlenmiştir.\
-\
-Veri seti, \`fakulte_cinsiyet_verisi.csv\` adlı dosyadan okunmuştur. Bu dosya \`proje.qmd\` dosyası ile aynı klasörde yer almaktadır. Veri R ortamına \`readr\` paketinin \`read_csv()\` fonksiyonu ile aktarılmıştır.\
-\
-Veri kaynağı, fakülte bazında öğrenci sayılarını içermesi nedeniyle cinsiyet dağılımı ve fakülte tercihleri hakkında karşılaştırmalı analiz yapmaya uygundur. Ancak veri seti yalnızca beş fakülte ve beş akademik yılı kapsadığı için elde edilen sonuçlar tüm yükseköğretim sistemi için genellenmemelidir.
-
-```{r}
-#| label: veri-kaynagi-kontrol
-
-unique(veri$Yil)
-
-unique(veri$Fakulte)
-
-unique(veri$Cinsiyet)
-```
-
-## Veri Hakkında Genel Bilgiler
-
-Veri seti toplamda 75 gözlemden oluşmaktadır. Bunun nedeni, 5 fakülte, 5 akademik yıl ve 3 cinsiyet kategorisinin birlikte yer almasıdır. Her fakülte ve yıl için ERKEK, KADIN ve TOPLAM değerleri ayrı satırlarda verilmiştir.\
-\
-Veri setinde hem kategorik hem de sayısal değişkenler bulunmaktadır. \`Yil\`, \`Cinsiyet\` ve \`Fakulte\` değişkenleri kategorik değişkenlerdir. \`Kisi_Sayisi\` değişkeni ise sayısal değişkendir.\
-
-```{r}
-#| label: veri-yapisi
-
-str(veri)
-
-#| label: veri-boyutu
-
-dim(veri)
-
-#| label: ozet-istatistik
-
-summary(veri)
-
-#| label: genel-bilgi-tablosu
-
-veri %>%
-  summarise(
-    Gozlem_Sayisi = n(),
-    Fakulte_Sayisi = n_distinct(Fakulte),
-    Yil_Sayisi = n_distinct(Yil),
-    Cinsiyet_Kategorisi = n_distinct(Cinsiyet)
-  ) %>%
-  kable()
-```
-
-## Tercih Sebebi
-
-```         
-Bu veri setinin tercih edilme nedeni, yükseköğretimde fakültelere göre kadın ve erkek öğrenci dağılımını incelemeye imkân sağlamasıdır. Kadın ve erkek öğrencilerin farklı fakültelerdeki temsil oranları, eğitim alanındaki yönelimleri ve akademik tercihleri anlamak açısından önemlidir.
-
-Özellikle Mühendislik ve Teknoloji fakültelerinde erkek öğrenci oranının daha yüksek olması beklenirken, Eğitim ve Sağlık fakültelerinde kadın öğrenci oranının daha yüksek olabileceği düşünülmektedir. Bu nedenle veri seti, fakülteler arasında cinsiyet temelli farklılıkları gözlemlemek için uygun bir yapı sunmaktadır.
-
-Ayrıca veri setinin yıllara göre düzenlenmiş olması, yalnızca mevcut dağılımı değil, zaman içerisindeki değişimi de incelemeyi mümkün kılmaktadır. Bu yönüyle veri seti hem fakülteler arası karşılaştırma hem de yıllara göre değişim analizi yapmak için uygundur.
-```
-
-```{r}
-#| label: fakulte-ozetleri
-
-veri_toplam %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Gozlem_Sayisi = n(),
-    Ortalama_Toplam_Ogrenci = mean(Kisi_Sayisi),
-    En_Dusuk_Toplam = min(Kisi_Sayisi),
-    En_Yuksek_Toplam = max(Kisi_Sayisi),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Ortalama_Toplam_Ogrenci)) %>%
-  kable()
-
-
-```
-
-## Ön İşleme
-
-```         
-Analize başlamadan önce veri seti R ortamında düzenlenmiştir. İlk olarak akademik yıl değişkeni sıralı faktör haline getirilmiştir. Bu işlem, grafiklerde yılların doğru kronolojik sırayla gösterilmesi için yapılmıştır.
-
-Daha sonra kadın ve erkek öğrenci sayıları uzun formata dönüştürülmüştür. Bu işlem sayesinde cinsiyet değişkeni ayrı bir kategori olarak ele alınmış ve karşılaştırmalı grafikler daha kolay oluşturulmuştur.
-
-Ayrıca kadın ve erkek öğrenci oranları hesaplanmıştır. Böylece yalnızca öğrenci sayıları değil, oransal dağılımlar da analiz edilmiştir.
-```
-
-```{r}
-
-#| label: uzun-veri-goster
-
-head(veri) %>%
-  kable()
-
-#| label: genis-veri-goster
-
-head(veri_genis) %>%
-  kable()
-
-```
-
-```         
-Eksik veri kontrolü aşağıda yapılmıştır.
-```
-
-```{r}
-
-#| label: eksik-veri-kontrol
-
-veri %>%
-  summarise(
-    Eksik_Yil = sum(is.na(Yil)),
-    Eksik_Cinsiyet = sum(is.na(Cinsiyet)),
-    Eksik_Fakulte = sum(is.na(Fakulte)),
-    Eksik_Kisi_Sayisi = sum(is.na(Kisi_Sayisi))
-  ) %>%
-  kable()
-
-```
-
-```         
-
-Toplam öğrenci sayılarının kadın ve erkek öğrenci sayılarıyla uyumlu olup olmadığı aşağıda kontrol edilmiştir.
-```
-
-```{r}
-
-#| label: toplam-kontrol
-
-veri_genis %>%
-  mutate(
-    Hesaplanan_Toplam = Erkek + Kadin,
-    Fark = Toplam - Hesaplanan_Toplam
-  ) %>%
-  select(Yil, Fakulte, Erkek, Kadin, Toplam, Hesaplanan_Toplam, Fark) %>%
-  kable()
-```
-
-Kadın ve erkek öğrenci oranları aşağıdaki tabloda gösterilmiştir.
-
-```{r}
-
-#| label: oran-tablosu
-
-oran_tablo <- oran_veri %>%
-  select(Yil, Fakulte, Erkek, Kadin, Toplam, Erkek_Orani, Kadin_Orani) %>%
-  mutate(
-    Erkek_Orani = round(Erkek_Orani, 2),
-    Kadin_Orani = round(Kadin_Orani, 2)
-  )
-
-oran_tablo %>%
-  kable()
-
-```
-
-# Analiz
-
-Analiz sürecinde veri seti hem toplam öğrenci sayıları hem de cinsiyet dağılımı açısından incelenmiştir. İlk olarak yıllara göre toplam öğrenci sayıları hesaplanmıştır. Daha sonra fakülteler arasındaki öğrenci yoğunluğu karşılaştırılmıştır.\
-\
-Cinsiyet dağılımını incelemek amacıyla kadın ve erkek öğrenci sayıları hem yıllara göre hem de fakültelere göre analiz edilmiştir. Ayrıca kadın ve erkek öğrenci oranları hesaplanarak fakülteler arasındaki oransal farklılıklar değerlendirilmiştir.\
-
-```{r}
-
-#| label: yillik-toplam
-
-yillik_toplam %>%
-  kable()
-
-#| label: fakulte-toplam
-
-fakulte_toplam %>%
-  kable()
-
-#| label: cinsiyet-toplam
-
-cinsiyet_toplam %>%
-  kable()
-
-```
-
-\
-
-## Keşifsel Veri Analizi
-
-Bu bölümde veri seti grafikler yardımıyla incelenmiştir. Grafiklerde yıllara göre değişim, fakültelere göre öğrenci yoğunluğu ve cinsiyet dağılımı görsel olarak değerlendirilmiştir.\
-\
-\## Yıllara Göre Toplam Öğrenci Sayısı\
-\
-Aşağıdaki grafik, incelenen fakültelerdeki toplam öğrenci sayısının akademik yıllara göre nasıl değiştiğini göstermektedir.\
-\
-
-```         
-```
-
-```{r}
-#| label: grafik-yillara-gore-toplam
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(yillik_toplam, aes(x = Yil, y = Toplam_Ogrenci, group = 1)) +
-  geom_line(linewidth = 1.2, color = "#4472C4") +
-  geom_point(size = 3, color = "#4472C4") +
-  geom_text(
-    aes(label = comma(Toplam_Ogrenci)),
-    vjust = -0.8,
-    size = 3.5
-  ) +
-  labs(
-    title = "Yıllara Gore Toplam Ogrenci Sayısı",
-    x = "Akademik Yıl",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-
-```
-
-Grafik incelendiğinde, toplam öğrenci sayısının yıllara göre değişim gösterdiği görülmektedir. Bu grafik, genel öğrenci yoğunluğunun hangi yıllarda arttığını veya azaldığını değerlendirmek için kullanılmıştır.\
-\
-\## Fakültelere Göre Toplam Öğrenci Sayısı\
-\
-Aşağıdaki grafik, beş yıllık dönem boyunca fakültelerin toplam öğrenci sayılarını karşılaştırmaktadır.
-
-```{r}
-#| label: grafik-fakulte-toplam
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(fakulte_toplam, aes(x = reorder(Fakulte, Toplam_Ogrenci), y = Toplam_Ogrenci)) +
-  geom_col(fill = "#70AD47") +
-  geom_text(aes(label = comma(Toplam_Ogrenci)), hjust = -0.1, size = 3.5) +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayısı",
-    x = "Fakulte",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-
-```
-
-Bu grafik, öğrenci yoğunluğu bakımından hangi fakültelerin öne çıktığını göstermektedir. Eğitim, Sağlık ve Mühendislik fakülteleri toplam öğrenci sayısı bakımından yüksek değerlere sahiptir. Teknoloji Fakültesi ise diğer fakültelere göre daha düşük öğrenci sayısına sahiptir.\
-\
-\## Yıllara Göre Kadın-Erkek Öğrenci Sayıları\
-\
-Aşağıdaki grafik, yıllara göre kadın ve erkek öğrenci sayılarının toplamını karşılaştırmaktadır.
-
-```{r}
-#| label: grafik-yil-cinsiyet
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(yil_cinsiyet, aes(x = Yil, y = Toplam, color = Cinsiyet, group = Cinsiyet)) +
-  geom_line(linewidth = 1.2) +
+  geom_line() +
   geom_point(size = 3) +
-  geom_text(aes(label = comma(Toplam)), vjust = -0.8, size = 3) +
-  labs(
-    title = "Yıllara Gore Kadın-Erkek Ogrenci Sayıları",
-    x = "Akademik Yıl",
-    y = "Ogrenci Sayısı",
-    color = "Cinsiyet"
-  ) +
-  scale_y_continuous(labels = comma) +
-  scale_color_manual(values = c("ERKEK" = "#4472C4", "KADIN" = "#ED7D31")) +  theme_minimal()
 
-```
+  theme_minimal()
 
-Grafik incelendiğinde, kadın ve erkek öğrenci sayılarının yıllara göre farklı eğilimler gösterebildiği görülmektedir. Kadın ve erkek toplamlarının birlikte gösterilmesi, genel cinsiyet dağılımının yıllara göre değişimini daha net ortaya koymaktadır.\
-\
-\## Fakültelere Göre Kadın-Erkek Dağılımı\
-\
-Aşağıdaki grafik, fakültelere göre kadın ve erkek öğrenci sayılarının toplamını göstermektedir.
+ggplotly(p5, tooltip = "text")
 
-```{r}
-#| label: grafik-fakulte-cinsiyet
-#| fig-width: 10
-#| fig-height: 6
+# ------------------------------------------------------------------------------
+# 10. DEĞİŞİM ANALİZİ
+# ------------------------------------------------------------------------------
 
-ggplot(fakulte_cinsiyet, aes(x = Fakulte, y = Toplam, fill = Cinsiyet)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Kadın-Erkek Ogrenci Dağılımı",
-    x = "Fakulte",
-    y = "Ogrenci Sayısı",
-    fill = "Cinsiyet"
-  ) +
-  scale_y_continuous(labels = comma) +
-  scale_fill_manual(values = c("ERKEK" = "#4472C4", "KADIN" = "#ED7D31")) +  theme_minimal()
-```
+degisim <- df_wide |>
 
-Bu grafik, fakülteler arasında cinsiyet dağılımı bakımından belirgin farklar olduğunu göstermektedir. Eğitim ve Sağlık fakültelerinde kadın öğrenci sayısı yüksekken, Mühendislik ve Teknoloji fakültelerinde erkek öğrenci sayısının daha yüksek olduğu görülmektedir.\
-\
-\## Fakültelerde Kadın Öğrenci Oranı\
-\
-Aşağıdaki grafik, yıllara göre fakültelerdeki kadın öğrenci oranlarını göstermektedir.
-
-```{r}
-#| label: grafik-kadin-orani
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(oran_veri, aes(x = Yil, y = Kadin_Orani, color = Fakulte, group = Fakulte)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  labs(
-    title = "Yıllara Gore Fakultelerde Kadın Ogrenci Oranı",
-    x = "Akademik Yıl",
-    y = "Kadın Ogrenci Oranı (%)",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +  theme_minimal()
-```
-
-Kadın öğrenci oranları incelendiğinde, Eğitim ve Sağlık fakültelerinde kadın öğrencilerin daha yüksek oranda temsil edildiği görülmektedir. Buna karşılık Mühendislik ve Teknoloji fakültelerinde kadın öğrenci oranı daha düşüktür.\
-\
-\## Fakültelerde Erkek Öğrenci Oranı\
-\
-Aşağıdaki grafik, yıllara göre fakültelerdeki erkek öğrenci oranlarını göstermektedir.
-
-```{r}
-#| label: grafik-erkek-orani
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(oran_veri, aes(x = Yil, y = Erkek_Orani, color = Fakulte, group = Fakulte)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  labs(
-    title = "Yıllara Gore Fakultelerde Erkek Ogrenci Oranı",
-    x = "Akademik Yıl",
-    y = "Erkek Ogrenci Oranı (%)",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +  theme_minimal()
-```
-
-Erkek öğrenci oranları incelendiğinde, Mühendislik ve Teknoloji fakültelerinde erkek öğrencilerin daha baskın olduğu görülmektedir. Bu durum teknik alanlarda erkek öğrenci temsilinin daha yüksek olduğunu göstermektedir.\
-\
-\## Fakülte Bazında Toplam Öğrenci Sayılarının Dağılımı\
-\
-Aşağıdaki boxplot grafiği, fakültelerin yıllara göre toplam öğrenci sayılarındaki dağılımını göstermektedir.
-
-```{r}
-#| label: grafik-boxplot
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(veri_toplam, aes(x = Fakulte, y = Kisi_Sayisi, fill = Fakulte)) +
-  geom_boxplot() +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayılarının Dağılımı",
-    x = "Fakulte",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +
-  theme_minimal() +
-  theme(legend.position = "none")
-```
-
-Boxplot grafiği, fakültelerin yıllara göre öğrenci sayılarının hangi aralıkta değiştiğini göstermektedir. Bu grafik, fakülteler arasında değişkenliğin daha kolay karşılaştırılmasını sağlar.\
-\
-\## Fakülte ve Yıl Bazında Isı Haritası\
-\
-Aşağıdaki ısı haritası, fakülte ve yıl kesişimindeki toplam öğrenci sayılarını göstermektedir.
-
-```{r}
-#| label: grafik-isi-haritasi
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(veri_toplam, aes(x = Yil, y = Fakulte, fill = Kisi_Sayisi)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = comma(Kisi_Sayisi)), size = 3) +
-  labs(
-    title = "Fakultelere ve Yıllara Gore Toplam Ogrenci Sayısı Isı Haritası",
-    x = "Akademik Yıl",
-    y = "Fakulte",
-    fill = "Toplam"
-  ) +
-  scale_fill_gradient(low = "#D9EAF7", high = "#4472C4") +  theme_minimal()
-```
-
-Isı haritası, hangi fakülte ve yıl kombinasyonlarında öğrenci yoğunluğunun daha yüksek olduğunu görsel olarak göstermektedir. Daha koyu renkler, daha yüksek öğrenci sayılarını ifade etmektedir.
-
-## Trend Analizi
-
-xxxxxx
-
-## Model Uydurma
-
-Bu projede temel amaç keşifsel veri analizi yapmak olsa da, yıllara göre toplam öğrenci sayısındaki eğilimi incelemek için basit doğrusal model kurulmuştur. Modelde bağımlı değişken toplam öğrenci sayısıdır. Bağımsız değişken ise akademik yılın sayısal karşılığıdır.\
-\
-Model genel olarak şu şekilde ifade edilebilir:\
-\
-\*\*Toplam Öğrenci Sayısı = β0 + β1 × Yıl + ε\*\*\
-\
-Burada β1 katsayısı, yıllara göre toplam öğrenci sayısının artış veya azalış eğilimini göstermektedir. Katsayının pozitif olması artış eğilimini, negatif olması ise azalış eğilimini ifade eder.\
-\
-
-```{r}
-#| label: model-verisi
-
-model_veri <- veri_toplam %>%
   mutate(
-    Yil_Sayi = as.numeric(Yil)
-  )
+    degisim_pp = `2024` - `2021`
+  ) |>
 
-model_veri %>%
-  select(Yil, Yil_Sayi, Fakulte, Kisi_Sayisi) %>%
-  head() %>%
-  kable()
+  arrange(desc(degisim_pp))
+
+print(degisim)
+
+# ------------------------------------------------------------------------------
+# 11. ÖZET BULGULAR
+# ------------------------------------------------------------------------------
+
+cat("\n=========================================\n")
+
+cat("EN YÜKSEK 2024 ORANI:\n")
+
+df_long |>
+  filter(yil == 2024) |>
+  slice_max(oran, n = 1) |>
+  select(alan_kisa, oran) |>
+  print()
+
+cat("\nEN DÜŞÜK 2024 ORANI:\n")
+
+df_long |>
+  filter(yil == 2024) |>
+  slice_min(oran, n = 1) |>
+  select(alan_kisa, oran) |>
+  print()
+
+cat("\nGENEL ORTALAMA:\n")
+
+print(mean(df_long$oran, na.rm = TRUE))
+
+cat("\nAnaliz tamamlandı\n")
+
+cat("\n=========================================\
 ```
-
-Her fakülte için ayrı doğrusal model kurulmuştur.
-
-```{r}
-#| label: model-sonuclari
-
-model_sonuclari <- model_veri %>%
-  group_by(Fakulte) %>%
-  do(tidy(lm(Kisi_Sayisi ~ Yil_Sayi, data = .)))
-
-model_sonuclari %>%
-  kable()
-
-```
-
-Model sonuçlarının daha anlaşılır olması için yalnızca eğilim katsayıları aşağıda gösterilmiştir.
-
-```{r}
-#| label: model-egilim-katsayilari
-
-egilim_sonuclari <- model_sonuclari %>%
-  filter(term == "Yil_Sayi") %>%
-  select(Fakulte, estimate, std.error, statistic, p.value) %>%
-  rename(
-    Egilim_Katsayisi = estimate,
-    Standart_Hata = std.error,
-    Test_Istatistigi = statistic,
-    P_Degeri = p.value
-  )
-
-egilim_sonuclari %>%
-  kable(digits = 3)
-```
-
-Model sonuçlarına göre eğilim katsayısı negatif olan fakültelerde toplam öğrenci sayısının yıllar içinde azalma eğiliminde olduğu, pozitif olan fakültelerde ise artış eğilimi olduğu söylenebilir. Ancak veri seti yalnızca beş akademik yılı kapsadığı için bu modeller güçlü bir tahmin modeli olarak değil, genel eğilimi gösteren destekleyici analizler olarak değerlendirilmelidir.\
-\
-Aşağıdaki grafik, fakültelere göre toplam öğrenci sayısı ve doğrusal eğilim çizgisini göstermektedir.
-
-```{r}
-#| label: grafik-model-egilim
-#| fig-width: 10
-#| fig-height: 6
-
-model_veri <- veri_toplam %>%
-  mutate(
-    Yil_Sayi = as.numeric(Yil)
-  )
-
-ggplot(model_veri, aes(x = Yil_Sayi, y = Kisi_Sayisi, color = Fakulte)) +
-  geom_point(size = 3) +
-  geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
-  scale_x_continuous(
-    breaks = 1:5,
-    labels = levels(model_veri$Yil)
-  ) +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayısı Egilim Modeli",
-    x = "Akademik Yıl",
-    y = "Toplam Ogrenci Sayısı",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-```
-
-## Sonuçlar
-
-Bu çalışmada 2020-2021 ile 2024-2025 akademik yılları arasında seçilmiş beş fakültedeki kadın ve erkek öğrenci sayıları analiz edilmiştir. Analiz sonucunda fakülteler arasında hem toplam öğrenci sayısı hem de cinsiyet dağılımı açısından belirgin farklılıklar olduğu görülmüştür.\
-\
-Genel bulgulara göre Eğitim Fakültesi, Sağlık Fakültesi ve Mühendislik Fakültesi öğrenci yoğunluğu bakımından öne çıkmaktadır. Teknoloji Fakültesi ise incelenen fakülteler arasında en düşük toplam öğrenci sayısına sahip fakültedir.\
-\
-Cinsiyet dağılımı açısından değerlendirildiğinde, Eğitim Fakültesi ve Sağlık Fakültesi’nde kadın öğrencilerin daha yüksek oranda temsil edildiği görülmektedir. Buna karşılık Mühendislik Fakültesi ve Teknoloji Fakültesi’nde erkek öğrenci oranı daha yüksektir. Bu durum, fakülte türlerine göre öğrenci tercihlerinin ve alan yönelimlerinin farklılaştığını göstermektedir.\
-\
-İktisadi ve İdari Bilimler Fakültesi’nde kadın ve erkek öğrenci sayılarının bazı yıllarda birbirine daha yakın olduğu görülmüştür. Bu fakülte, cinsiyet dağılımı açısından diğer fakültelere göre daha dengeli bir yapı sergilemektedir.\
-\
-Model uydurma aşamasında kurulan basit doğrusal modeller, fakültelerdeki toplam öğrenci sayılarının yıllara göre genel eğilimini incelemek amacıyla kullanılmıştır. Ancak veri seti yalnızca beş yıllık dönemden oluştuğu için model sonuçları uzun dönemli tahmin amacıyla değil, eğilimi destekleyici bir analiz olarak değerlendirilmelidir.\
-\
-Sonuç olarak bu proje, fakültelere göre kadın ve erkek öğrenci dağılımını anlamak için yararlı bir analiz sunmaktadır. Elde edilen bulgular, yükseköğretimde fakülte türlerine göre cinsiyet dağılımının farklılaştığını göstermektedir. Daha kapsamlı bir çalışma için ilerleyen aşamalarda daha fazla fakülte, daha uzun yıllık veri ve farklı üniversitelerden elde edilen bilgiler analize dahil edilebilir.
-
-```{r}
-final_ozet <- veri_genis %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Toplam_Erkek = sum(Erkek, na.rm = TRUE),
-    Toplam_Kadin = sum(Kadin, na.rm = TRUE),
-    Genel_Toplam = sum(Toplam, na.rm = TRUE),
-    Kadin_Orani = round(Toplam_Kadin / Genel_Toplam * 100, 2),
-    Erkek_Orani = round(Toplam_Erkek / Genel_Toplam * 100, 2),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Genel_Toplam))
-
-final_ozet %>%
-  kable()
-```
-
-# Sonuçlar ve Ana Çıkarımlar
-
-xxxxxx
-
----
-title: "Fakultelere Gore Kadin ve Erkek Ogrenci Sayıları Analizi"
-author: "Hande DOLAY, Sıla YALÇINKAYA"
-format: 
-  html:
-    toc: true
-    toc-depth: 3
-    theme: cosmo
-    code-fold: true
-    code-tools: true
-editor: visual
----
-
-```{r}
-#| label: setup
-#| message: false
-#| warning: false
-
-library(tidyverse)
-library(readxl)
-library(scales)
-library(broom)
-library(knitr)
-
-veri <- read_excel("fakulte_cinsiyet_verisi.csv.xlsx")
-
-names(veri) <- c("Yil", "Cinsiyet", "Fakulte", "Kisi_Sayisi")
-
-veri <- veri %>%
-  mutate(
-    Yil = as.character(Yil),
-    Cinsiyet = as.character(Cinsiyet),
-    Fakulte = as.character(Fakulte),
-    Kisi_Sayisi = as.numeric(Kisi_Sayisi),
-    Yil = factor(
-      Yil,
-      levels = c("2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025")
-    ),
-    Cinsiyet = factor(
-      Cinsiyet,
-      levels = c("ERKEK", "KADIN", "TOPLAM")
-    )
-  )
-
-veri_cinsiyet <- veri %>%
-  filter(Cinsiyet %in% c("ERKEK", "KADIN"))
-
-veri_toplam <- veri %>%
-  filter(Cinsiyet == "TOPLAM")
-
-veri_genis <- veri %>%
-  pivot_wider(
-    names_from = Cinsiyet,
-    values_from = Kisi_Sayisi
-  ) %>%
-  rename(
-    Erkek = ERKEK,
-    Kadin = KADIN,
-    Toplam = TOPLAM
-  )
-
-oran_veri <- veri_genis %>%
-  mutate(
-    Kadin_Orani = Kadin / Toplam * 100,
-    Erkek_Orani = Erkek / Toplam * 100
-  )
-
-yillik_toplam <- veri_toplam %>%
-  group_by(Yil) %>%
-  summarise(
-    Toplam_Ogrenci = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-fakulte_toplam <- veri_toplam %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Toplam_Ogrenci = sum(Kisi_Sayisi),
-    Ortalama_Ogrenci = mean(Kisi_Sayisi),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Toplam_Ogrenci))
-
-cinsiyet_toplam <- veri_cinsiyet %>%
-  group_by(Cinsiyet) %>%
-  summarise(
-    Toplam_Sayi = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-yil_cinsiyet <- veri_cinsiyet %>%
-  group_by(Yil, Cinsiyet) %>%
-  summarise(
-    Toplam = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-fakulte_cinsiyet <- veri_cinsiyet %>%
-  group_by(Fakulte, Cinsiyet) %>%
-  summarise(
-    Toplam = sum(Kisi_Sayisi),
-    .groups = "drop"
-  )
-
-```
-
-# Proje Genel Bakış ve Kapsamı
-
-```         
-Bu projenin amacı, seçilmiş fakültelerde öğrenim gören kadın ve erkek öğrenci sayılarını yıllara göre incelemek ve fakülte bazında cinsiyet dağılımındaki değişimleri analiz etmektir. Çalışmada Eğitim Fakültesi, İktisadi ve İdari Bilimler Fakültesi, Mühendislik Fakültesi, Sağlık Fakültesi ve Teknoloji Fakültesi ele alınmıştır.
-
-Analiz kapsamında 2020-2021 ile 2024-2025 akademik yılları arasındaki öğrenci sayıları kullanılmıştır. Veri setinde her fakülte için erkek öğrenci sayısı, kadın öğrenci sayısı ve toplam öğrenci sayısı yer almaktadır.
-
-Bu çalışmada temel amaç, fakülteler arasında öğrenci yoğunluğunu, kadın-erkek dağılımını ve yıllara göre değişimi görselleştirerek yorumlamaktır. Böylece yükseköğretimde farklı fakülte türlerine göre kadın ve erkek öğrencilerin temsil düzeyleri hakkında genel bir değerlendirme yapılması hedeflenmiştir.
-```
-
-# Veri
-
-Bu projede kullanılan veri seti, fakültelere ve akademik yıllara göre kadın ve erkek öğrenci sayılarını içermektedir. Veri setinde beş farklı fakülte ve beş akademik yıl bulunmaktadır. Her satır, belirli bir akademik yılda belirli bir fakülteye ait öğrenci sayılarını göstermektedir.\
-\
-Veri setindeki temel değişkenler şu şekildedir:\
-\
-- \*\*Yil:\*\* Akademik yılı göstermektedir.\
-- \*\*Fakulte:\*\* Öğrenci sayısının ait olduğu fakülteyi belirtmektedir.\
-- \*\*Erkek:\*\* İlgili fakültedeki erkek öğrenci sayısını göstermektedir.\
-- \*\*Kadin:\*\* İlgili fakültedeki kadın öğrenci sayısını göstermektedir.\
-- \*\*Toplam:\*\* Kadın ve erkek öğrenci sayılarının toplamını göstermektedir.\
-\
-Bu çalışmada veri seti, R ortamına \`readr\` kütüphanesinin \`read_csv()\` fonksiyonu kullanılarak klasörde yer alan CSV dosyasından aktarılmıştır.
-
-```{r}
-#| label: veri-ilk-satirlar
-
-head(veri) %>%
-  kable()
-```
-
-## Veri Kaynağı
-
-Çalışmada kullanılan veri seti, fakültelere göre kadın ve erkek öğrenci sayılarını gösteren yükseköğretim istatistikleri temel alınarak hazırlanmıştır. Proje kapsamında kullanılan değerler tablo üzerinden alınmış ve analiz yapılabilecek şekilde CSV formatında düzenlenmiştir.\
-\
-Veri seti, \`fakulte_cinsiyet_verisi.csv\` adlı dosyadan okunmuştur. Bu dosya \`proje.qmd\` dosyası ile aynı klasörde yer almaktadır. Veri R ortamına \`readr\` paketinin \`read_csv()\` fonksiyonu ile aktarılmıştır.\
-\
-Veri kaynağı, fakülte bazında öğrenci sayılarını içermesi nedeniyle cinsiyet dağılımı ve fakülte tercihleri hakkında karşılaştırmalı analiz yapmaya uygundur. Ancak veri seti yalnızca beş fakülte ve beş akademik yılı kapsadığı için elde edilen sonuçlar tüm yükseköğretim sistemi için genellenmemelidir.
-
-```{r}
-#| label: veri-kaynagi-kontrol
-
-unique(veri$Yil)
-
-unique(veri$Fakulte)
-
-unique(veri$Cinsiyet)
-```
-
-## Veri Hakkında Genel Bilgiler
-
-Veri seti toplamda 75 gözlemden oluşmaktadır. Bunun nedeni, 5 fakülte, 5 akademik yıl ve 3 cinsiyet kategorisinin birlikte yer almasıdır. Her fakülte ve yıl için ERKEK, KADIN ve TOPLAM değerleri ayrı satırlarda verilmiştir.\
-\
-Veri setinde hem kategorik hem de sayısal değişkenler bulunmaktadır. \`Yil\`, \`Cinsiyet\` ve \`Fakulte\` değişkenleri kategorik değişkenlerdir. \`Kisi_Sayisi\` değişkeni ise sayısal değişkendir.\
-
-```{r}
-#| label: veri-yapisi
-
-str(veri)
-
-#| label: veri-boyutu
-
-dim(veri)
-
-#| label: ozet-istatistik
-
-summary(veri)
-
-#| label: genel-bilgi-tablosu
-
-veri %>%
-  summarise(
-    Gozlem_Sayisi = n(),
-    Fakulte_Sayisi = n_distinct(Fakulte),
-    Yil_Sayisi = n_distinct(Yil),
-    Cinsiyet_Kategorisi = n_distinct(Cinsiyet)
-  ) %>%
-  kable()
-```
-
-## Tercih Sebebi
-
-```         
-Bu veri setinin tercih edilme nedeni, yükseköğretimde fakültelere göre kadın ve erkek öğrenci dağılımını incelemeye imkân sağlamasıdır. Kadın ve erkek öğrencilerin farklı fakültelerdeki temsil oranları, eğitim alanındaki yönelimleri ve akademik tercihleri anlamak açısından önemlidir.
-
-Özellikle Mühendislik ve Teknoloji fakültelerinde erkek öğrenci oranının daha yüksek olması beklenirken, Eğitim ve Sağlık fakültelerinde kadın öğrenci oranının daha yüksek olabileceği düşünülmektedir. Bu nedenle veri seti, fakülteler arasında cinsiyet temelli farklılıkları gözlemlemek için uygun bir yapı sunmaktadır.
-
-Ayrıca veri setinin yıllara göre düzenlenmiş olması, yalnızca mevcut dağılımı değil, zaman içerisindeki değişimi de incelemeyi mümkün kılmaktadır. Bu yönüyle veri seti hem fakülteler arası karşılaştırma hem de yıllara göre değişim analizi yapmak için uygundur.
-```
-
-```{r}
-#| label: fakulte-ozetleri
-
-veri_toplam %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Gozlem_Sayisi = n(),
-    Ortalama_Toplam_Ogrenci = mean(Kisi_Sayisi),
-    En_Dusuk_Toplam = min(Kisi_Sayisi),
-    En_Yuksek_Toplam = max(Kisi_Sayisi),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Ortalama_Toplam_Ogrenci)) %>%
-  kable()
-
-
-```
-
-## Ön İşleme
-
-```         
-Analize başlamadan önce veri seti R ortamında düzenlenmiştir. İlk olarak akademik yıl değişkeni sıralı faktör haline getirilmiştir. Bu işlem, grafiklerde yılların doğru kronolojik sırayla gösterilmesi için yapılmıştır.
-
-Daha sonra kadın ve erkek öğrenci sayıları uzun formata dönüştürülmüştür. Bu işlem sayesinde cinsiyet değişkeni ayrı bir kategori olarak ele alınmış ve karşılaştırmalı grafikler daha kolay oluşturulmuştur.
-
-Ayrıca kadın ve erkek öğrenci oranları hesaplanmıştır. Böylece yalnızca öğrenci sayıları değil, oransal dağılımlar da analiz edilmiştir.
-```
-
-```{r}
-
-#| label: uzun-veri-goster
-
-head(veri) %>%
-  kable()
-
-#| label: genis-veri-goster
-
-head(veri_genis) %>%
-  kable()
-
-```
-
-```         
-Eksik veri kontrolü aşağıda yapılmıştır.
-```
-
-```{r}
-
-#| label: eksik-veri-kontrol
-
-veri %>%
-  summarise(
-    Eksik_Yil = sum(is.na(Yil)),
-    Eksik_Cinsiyet = sum(is.na(Cinsiyet)),
-    Eksik_Fakulte = sum(is.na(Fakulte)),
-    Eksik_Kisi_Sayisi = sum(is.na(Kisi_Sayisi))
-  ) %>%
-  kable()
-
-```
-
-```         
-
-Toplam öğrenci sayılarının kadın ve erkek öğrenci sayılarıyla uyumlu olup olmadığı aşağıda kontrol edilmiştir.
-```
-
-```{r}
-
-#| label: toplam-kontrol
-
-veri_genis %>%
-  mutate(
-    Hesaplanan_Toplam = Erkek + Kadin,
-    Fark = Toplam - Hesaplanan_Toplam
-  ) %>%
-  select(Yil, Fakulte, Erkek, Kadin, Toplam, Hesaplanan_Toplam, Fark) %>%
-  kable()
-```
-
-Kadın ve erkek öğrenci oranları aşağıdaki tabloda gösterilmiştir.
-
-```{r}
-
-#| label: oran-tablosu
-
-oran_tablo <- oran_veri %>%
-  select(Yil, Fakulte, Erkek, Kadin, Toplam, Erkek_Orani, Kadin_Orani) %>%
-  mutate(
-    Erkek_Orani = round(Erkek_Orani, 2),
-    Kadin_Orani = round(Kadin_Orani, 2)
-  )
-
-oran_tablo %>%
-  kable()
-
-```
-
-# Analiz
-
-Analiz sürecinde veri seti hem toplam öğrenci sayıları hem de cinsiyet dağılımı açısından incelenmiştir. İlk olarak yıllara göre toplam öğrenci sayıları hesaplanmıştır. Daha sonra fakülteler arasındaki öğrenci yoğunluğu karşılaştırılmıştır.\
-\
-Cinsiyet dağılımını incelemek amacıyla kadın ve erkek öğrenci sayıları hem yıllara göre hem de fakültelere göre analiz edilmiştir. Ayrıca kadın ve erkek öğrenci oranları hesaplanarak fakülteler arasındaki oransal farklılıklar değerlendirilmiştir.\
-
-```{r}
-
-#| label: yillik-toplam
-
-yillik_toplam %>%
-  kable()
-
-#| label: fakulte-toplam
-
-fakulte_toplam %>%
-  kable()
-
-#| label: cinsiyet-toplam
-
-cinsiyet_toplam %>%
-  kable()
-
-```
-
-\
-
-## Keşifsel Veri Analizi
-
-Bu bölümde veri seti grafikler yardımıyla incelenmiştir. Grafiklerde yıllara göre değişim, fakültelere göre öğrenci yoğunluğu ve cinsiyet dağılımı görsel olarak değerlendirilmiştir.\
-\
-\## Yıllara Göre Toplam Öğrenci Sayısı\
-\
-Aşağıdaki grafik, incelenen fakültelerdeki toplam öğrenci sayısının akademik yıllara göre nasıl değiştiğini göstermektedir.\
-\
-
-```         
-```
-
-```{r}
-#| label: grafik-yillara-gore-toplam
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(yillik_toplam, aes(x = Yil, y = Toplam_Ogrenci, group = 1)) +
-  geom_line(linewidth = 1.2, color = "#4472C4") +
-  geom_point(size = 3, color = "#4472C4") +
-  geom_text(
-    aes(label = comma(Toplam_Ogrenci)),
-    vjust = -0.8,
-    size = 3.5
-  ) +
-  labs(
-    title = "Yıllara Gore Toplam Ogrenci Sayısı",
-    x = "Akademik Yıl",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-
-```
-
-Grafik incelendiğinde, toplam öğrenci sayısının yıllara göre değişim gösterdiği görülmektedir. Bu grafik, genel öğrenci yoğunluğunun hangi yıllarda arttığını veya azaldığını değerlendirmek için kullanılmıştır.\
-\
-\## Fakültelere Göre Toplam Öğrenci Sayısı\
-\
-Aşağıdaki grafik, beş yıllık dönem boyunca fakültelerin toplam öğrenci sayılarını karşılaştırmaktadır.
-
-```{r}
-#| label: grafik-fakulte-toplam
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(fakulte_toplam, aes(x = reorder(Fakulte, Toplam_Ogrenci), y = Toplam_Ogrenci)) +
-  geom_col(fill = "#70AD47") +
-  geom_text(aes(label = comma(Toplam_Ogrenci)), hjust = -0.1, size = 3.5) +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayısı",
-    x = "Fakulte",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-
-```
-
-Bu grafik, öğrenci yoğunluğu bakımından hangi fakültelerin öne çıktığını göstermektedir. Eğitim, Sağlık ve Mühendislik fakülteleri toplam öğrenci sayısı bakımından yüksek değerlere sahiptir. Teknoloji Fakültesi ise diğer fakültelere göre daha düşük öğrenci sayısına sahiptir.\
-\
-\## Yıllara Göre Kadın-Erkek Öğrenci Sayıları\
-\
-Aşağıdaki grafik, yıllara göre kadın ve erkek öğrenci sayılarının toplamını karşılaştırmaktadır.
-
-```{r}
-#| label: grafik-yil-cinsiyet
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(yil_cinsiyet, aes(x = Yil, y = Toplam, color = Cinsiyet, group = Cinsiyet)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3) +
-  geom_text(aes(label = comma(Toplam)), vjust = -0.8, size = 3) +
-  labs(
-    title = "Yıllara Gore Kadın-Erkek Ogrenci Sayıları",
-    x = "Akademik Yıl",
-    y = "Ogrenci Sayısı",
-    color = "Cinsiyet"
-  ) +
-  scale_y_continuous(labels = comma) +
-  scale_color_manual(values = c("ERKEK" = "#4472C4", "KADIN" = "#ED7D31")) +  theme_minimal()
-
-```
-
-Grafik incelendiğinde, kadın ve erkek öğrenci sayılarının yıllara göre farklı eğilimler gösterebildiği görülmektedir. Kadın ve erkek toplamlarının birlikte gösterilmesi, genel cinsiyet dağılımının yıllara göre değişimini daha net ortaya koymaktadır.\
-\
-\## Fakültelere Göre Kadın-Erkek Dağılımı\
-\
-Aşağıdaki grafik, fakültelere göre kadın ve erkek öğrenci sayılarının toplamını göstermektedir.
-
-```{r}
-#| label: grafik-fakulte-cinsiyet
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(fakulte_cinsiyet, aes(x = Fakulte, y = Toplam, fill = Cinsiyet)) +
-  geom_col(position = "dodge") +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Kadın-Erkek Ogrenci Dağılımı",
-    x = "Fakulte",
-    y = "Ogrenci Sayısı",
-    fill = "Cinsiyet"
-  ) +
-  scale_y_continuous(labels = comma) +
-  scale_fill_manual(values = c("ERKEK" = "#4472C4", "KADIN" = "#ED7D31")) +  theme_minimal()
-```
-
-Bu grafik, fakülteler arasında cinsiyet dağılımı bakımından belirgin farklar olduğunu göstermektedir. Eğitim ve Sağlık fakültelerinde kadın öğrenci sayısı yüksekken, Mühendislik ve Teknoloji fakültelerinde erkek öğrenci sayısının daha yüksek olduğu görülmektedir.\
-\
-\## Fakültelerde Kadın Öğrenci Oranı\
-\
-Aşağıdaki grafik, yıllara göre fakültelerdeki kadın öğrenci oranlarını göstermektedir.
-
-```{r}
-#| label: grafik-kadin-orani
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(oran_veri, aes(x = Yil, y = Kadin_Orani, color = Fakulte, group = Fakulte)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  labs(
-    title = "Yıllara Gore Fakultelerde Kadın Ogrenci Oranı",
-    x = "Akademik Yıl",
-    y = "Kadın Ogrenci Oranı (%)",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +  theme_minimal()
-```
-
-Kadın öğrenci oranları incelendiğinde, Eğitim ve Sağlık fakültelerinde kadın öğrencilerin daha yüksek oranda temsil edildiği görülmektedir. Buna karşılık Mühendislik ve Teknoloji fakültelerinde kadın öğrenci oranı daha düşüktür.\
-\
-\## Fakültelerde Erkek Öğrenci Oranı\
-\
-Aşağıdaki grafik, yıllara göre fakültelerdeki erkek öğrenci oranlarını göstermektedir.
-
-```{r}
-#| label: grafik-erkek-orani
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(oran_veri, aes(x = Yil, y = Erkek_Orani, color = Fakulte, group = Fakulte)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  labs(
-    title = "Yıllara Gore Fakultelerde Erkek Ogrenci Oranı",
-    x = "Akademik Yıl",
-    y = "Erkek Ogrenci Oranı (%)",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +  theme_minimal()
-```
-
-Erkek öğrenci oranları incelendiğinde, Mühendislik ve Teknoloji fakültelerinde erkek öğrencilerin daha baskın olduğu görülmektedir. Bu durum teknik alanlarda erkek öğrenci temsilinin daha yüksek olduğunu göstermektedir.\
-\
-\## Fakülte Bazında Toplam Öğrenci Sayılarının Dağılımı\
-\
-Aşağıdaki boxplot grafiği, fakültelerin yıllara göre toplam öğrenci sayılarındaki dağılımını göstermektedir.
-
-```{r}
-#| label: grafik-boxplot
-#| fig-width: 9
-#| fig-height: 5
-
-ggplot(veri_toplam, aes(x = Fakulte, y = Kisi_Sayisi, fill = Fakulte)) +
-  geom_boxplot() +
-  coord_flip() +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayılarının Dağılımı",
-    x = "Fakulte",
-    y = "Toplam Ogrenci Sayısı"
-  ) +
-  scale_y_continuous(labels = comma) +
-  theme_minimal() +
-  theme(legend.position = "none")
-```
-
-Boxplot grafiği, fakültelerin yıllara göre öğrenci sayılarının hangi aralıkta değiştiğini göstermektedir. Bu grafik, fakülteler arasında değişkenliğin daha kolay karşılaştırılmasını sağlar.\
-\
-\## Fakülte ve Yıl Bazında Isı Haritası\
-\
-Aşağıdaki ısı haritası, fakülte ve yıl kesişimindeki toplam öğrenci sayılarını göstermektedir.
-
-```{r}
-#| label: grafik-isi-haritasi
-#| fig-width: 10
-#| fig-height: 6
-
-ggplot(veri_toplam, aes(x = Yil, y = Fakulte, fill = Kisi_Sayisi)) +
-  geom_tile(color = "white") +
-  geom_text(aes(label = comma(Kisi_Sayisi)), size = 3) +
-  labs(
-    title = "Fakultelere ve Yıllara Gore Toplam Ogrenci Sayısı Isı Haritası",
-    x = "Akademik Yıl",
-    y = "Fakulte",
-    fill = "Toplam"
-  ) +
-  scale_fill_gradient(low = "#D9EAF7", high = "#4472C4") +  theme_minimal()
-```
-
-Isı haritası, hangi fakülte ve yıl kombinasyonlarında öğrenci yoğunluğunun daha yüksek olduğunu görsel olarak göstermektedir. Daha koyu renkler, daha yüksek öğrenci sayılarını ifade etmektedir.
-
-## Trend Analizi
-
-xxxxxx
-
-## Model Uydurma
-
-Bu projede temel amaç keşifsel veri analizi yapmak olsa da, yıllara göre toplam öğrenci sayısındaki eğilimi incelemek için basit doğrusal model kurulmuştur. Modelde bağımlı değişken toplam öğrenci sayısıdır. Bağımsız değişken ise akademik yılın sayısal karşılığıdır.\
-\
-Model genel olarak şu şekilde ifade edilebilir:\
-\
-\*\*Toplam Öğrenci Sayısı = β0 + β1 × Yıl + ε\*\*\
-\
-Burada β1 katsayısı, yıllara göre toplam öğrenci sayısının artış veya azalış eğilimini göstermektedir. Katsayının pozitif olması artış eğilimini, negatif olması ise azalış eğilimini ifade eder.\
-\
-
-```{r}
-#| label: model-verisi
-
-model_veri <- veri_toplam %>%
-  mutate(
-    Yil_Sayi = as.numeric(Yil)
-  )
-
-model_veri %>%
-  select(Yil, Yil_Sayi, Fakulte, Kisi_Sayisi) %>%
-  head() %>%
-  kable()
-```
-
-Her fakülte için ayrı doğrusal model kurulmuştur.
-
-```{r}
-#| label: model-sonuclari
-
-model_sonuclari <- model_veri %>%
-  group_by(Fakulte) %>%
-  do(tidy(lm(Kisi_Sayisi ~ Yil_Sayi, data = .)))
-
-model_sonuclari %>%
-  kable()
-
-```
-
-Model sonuçlarının daha anlaşılır olması için yalnızca eğilim katsayıları aşağıda gösterilmiştir.
-
-```{r}
-#| label: model-egilim-katsayilari
-
-egilim_sonuclari <- model_sonuclari %>%
-  filter(term == "Yil_Sayi") %>%
-  select(Fakulte, estimate, std.error, statistic, p.value) %>%
-  rename(
-    Egilim_Katsayisi = estimate,
-    Standart_Hata = std.error,
-    Test_Istatistigi = statistic,
-    P_Degeri = p.value
-  )
-
-egilim_sonuclari %>%
-  kable(digits = 3)
-```
-
-Model sonuçlarına göre eğilim katsayısı negatif olan fakültelerde toplam öğrenci sayısının yıllar içinde azalma eğiliminde olduğu, pozitif olan fakültelerde ise artış eğilimi olduğu söylenebilir. Ancak veri seti yalnızca beş akademik yılı kapsadığı için bu modeller güçlü bir tahmin modeli olarak değil, genel eğilimi gösteren destekleyici analizler olarak değerlendirilmelidir.\
-\
-Aşağıdaki grafik, fakültelere göre toplam öğrenci sayısı ve doğrusal eğilim çizgisini göstermektedir.
-
-```{r}
-#| label: grafik-model-egilim
-#| fig-width: 10
-#| fig-height: 6
-
-model_veri <- veri_toplam %>%
-  mutate(
-    Yil_Sayi = as.numeric(Yil)
-  )
-
-ggplot(model_veri, aes(x = Yil_Sayi, y = Kisi_Sayisi, color = Fakulte)) +
-  geom_point(size = 3) +
-  geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
-  scale_x_continuous(
-    breaks = 1:5,
-    labels = levels(model_veri$Yil)
-  ) +
-  labs(
-    title = "Fakultelere Gore Toplam Ogrenci Sayısı Egilim Modeli",
-    x = "Akademik Yıl",
-    y = "Toplam Ogrenci Sayısı",
-    color = "Fakulte"
-  ) +
-  scale_y_continuous(labels = comma) +  theme_minimal()
-```
-
-## Sonuçlar
-
-Bu çalışmada 2020-2021 ile 2024-2025 akademik yılları arasında seçilmiş beş fakültedeki kadın ve erkek öğrenci sayıları analiz edilmiştir. Analiz sonucunda fakülteler arasında hem toplam öğrenci sayısı hem de cinsiyet dağılımı açısından belirgin farklılıklar olduğu görülmüştür.\
-\
-Genel bulgulara göre Eğitim Fakültesi, Sağlık Fakültesi ve Mühendislik Fakültesi öğrenci yoğunluğu bakımından öne çıkmaktadır. Teknoloji Fakültesi ise incelenen fakülteler arasında en düşük toplam öğrenci sayısına sahip fakültedir.\
-\
-Cinsiyet dağılımı açısından değerlendirildiğinde, Eğitim Fakültesi ve Sağlık Fakültesi’nde kadın öğrencilerin daha yüksek oranda temsil edildiği görülmektedir. Buna karşılık Mühendislik Fakültesi ve Teknoloji Fakültesi’nde erkek öğrenci oranı daha yüksektir. Bu durum, fakülte türlerine göre öğrenci tercihlerinin ve alan yönelimlerinin farklılaştığını göstermektedir.\
-\
-İktisadi ve İdari Bilimler Fakültesi’nde kadın ve erkek öğrenci sayılarının bazı yıllarda birbirine daha yakın olduğu görülmüştür. Bu fakülte, cinsiyet dağılımı açısından diğer fakültelere göre daha dengeli bir yapı sergilemektedir.\
-\
-Model uydurma aşamasında kurulan basit doğrusal modeller, fakültelerdeki toplam öğrenci sayılarının yıllara göre genel eğilimini incelemek amacıyla kullanılmıştır. Ancak veri seti yalnızca beş yıllık dönemden oluştuğu için model sonuçları uzun dönemli tahmin amacıyla değil, eğilimi destekleyici bir analiz olarak değerlendirilmelidir.\
-\
-Sonuç olarak bu proje, fakültelere göre kadın ve erkek öğrenci dağılımını anlamak için yararlı bir analiz sunmaktadır. Elde edilen bulgular, yükseköğretimde fakülte türlerine göre cinsiyet dağılımının farklılaştığını göstermektedir. Daha kapsamlı bir çalışma için ilerleyen aşamalarda daha fazla fakülte, daha uzun yıllık veri ve farklı üniversitelerden elde edilen bilgiler analize dahil edilebilir.
-
-```{r}
-final_ozet <- veri_genis %>%
-  group_by(Fakulte) %>%
-  summarise(
-    Toplam_Erkek = sum(Erkek, na.rm = TRUE),
-    Toplam_Kadin = sum(Kadin, na.rm = TRUE),
-    Genel_Toplam = sum(Toplam, na.rm = TRUE),
-    Kadin_Orani = round(Toplam_Kadin / Genel_Toplam * 100, 2),
-    Erkek_Orani = round(Toplam_Erkek / Genel_Toplam * 100, 2),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Genel_Toplam))
-
-final_ozet %>%
-  kable()
-```
-
-# Sonuçlar ve Ana Çıkarımlar
-
-xxxxxx
