@@ -1,703 +1,671 @@
 ---
-title: "Türkiye'de Yükseköğretim Mezunlarının Beyin Göçü Analizi"
-author: "Proje Ekibi"
-format: 
+title: "Türkiye'de Cinsiyet ve Ölüm Nedenlerine Göre Ölümler"
+subtitle: "MÜY665 İş Analitiği Dönem Projesi"
+author: "Hande DOLAY, Sıla ÇELİKTAŞ YALÇINKAYA"
+date: "2026-05-21"
+format:
   html:
     toc: true
     toc-depth: 3
-    theme: cosmo
     code-fold: true
     code-tools: true
-editor: visual
+    theme: cosmo
+    df-print: paged
+execute:
+  warning: false
+  message: false
 ---
-
-```{r}
-#| label: setup-veri
-#| include: false
-
-
-
-library(tidyverse)
-library(readxl)
-library(knitr)
-library(broom)
-
-# Veri dosyalarını oku (data/ klasöründe olmalılar)
-veri_alanlar    <- read_excel("data/beyin_gocu_alanlar.xlsx")
-veri_cinsiyet   <- read_excel("data/beyin_gocu_cinsiyet.xlsx")
-veri_universite <- read_excel("data/beyin_gocu_universite.xlsx")
-veri_ulke       <- read_excel("data/beyin_gocu_ulke.xlsx")
-veri_dil        <- read_excel("data/beyin_gocu_dil.xlsx")
-veri_bolum      <- read_excel("data/beyin_gocu_bolum.xlsx")
-
-# Grafiklerde kullanılan özet tabloları
-alan_ortalama <- veri_alanlar %>%
-  group_by(Egitim_Alani) %>%
-  summarise(
-    Ortalama_Oran = mean(Beyin_Gocu_Orani),
-    Min_Oran      = min(Beyin_Gocu_Orani),
-    Max_Oran      = max(Beyin_Gocu_Orani),
-    .groups = "drop"
-  )
-
-yillik_ortalama <- veri_alanlar %>%
-  group_by(Yil) %>%
-  summarise(Ortalama_Oran = mean(Beyin_Gocu_Orani), .groups = "drop")
-```
----
-
-```{r}
-#| label: setup
-#| message: false
-#| warning: false
-
-library(tidyverse)
-library(readxl)
-library(scales)
-library(broom)
-library(knitr)
-
-# --- 1) Ana veri: Egitim alanlarina gore beyin gocu (2021-2024) ---
-veri_alanlar <- read_excel("data/beyin_gocu_alanlar.xlsx")
-veri_alanlar <- veri_alanlar %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Egitim_Alani = as.character(Egitim_Alani),
-    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani),
-    Yil_Factor = factor(Yil, levels = c(2021, 2022, 2023, 2024))
-  )
-
-# --- 2) Cinsiyete gore beyin gocu ---
-veri_cinsiyet <- read_excel("data/beyin_gocu_cinsiyet.xlsx") %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Cinsiyet = factor(Cinsiyet, levels = c("Genel", "Kadin", "Erkek")),
-    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
-  )
-
-# --- 3) Universite turune gore beyin gocu ---
-veri_universite <- read_excel("data/beyin_gocu_universite.xlsx") %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Universite_Turu = as.character(Universite_Turu),
-    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
-  )
-
-# --- 4) Goc edilen ulkelere gore dagilim ---
-veri_ulke <- read_excel("data/beyin_gocu_ulke.xlsx") %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Ulke = as.character(Ulke),
-    Pay_Yuzdesi = as.numeric(Pay_Yuzdesi)
-  )
-
-# --- 5) Egitim diline gore beyin gocu ---
-veri_dil <- read_excel("data/beyin_gocu_dil.xlsx") %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Egitim_Dili = as.character(Egitim_Dili),
-    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
-  )
-
-# --- 6) En yuksek beyin gocu oranina sahip lisans bolumleri ---
-veri_bolum <- read_excel("data/beyin_gocu_bolum.xlsx") %>%
-  mutate(
-    Yil = as.integer(Yil),
-    Bolum = as.character(Bolum),
-    Beyin_Gocu_Orani = as.numeric(Beyin_Gocu_Orani)
-  )
-
-# --- Ek hesaplamalar ---
-alan_ortalama <- veri_alanlar %>%
-  group_by(Egitim_Alani) %>%
-  summarise(
-    Ortalama_Oran = mean(Beyin_Gocu_Orani),
-    Min_Oran = min(Beyin_Gocu_Orani),
-    Max_Oran = max(Beyin_Gocu_Orani),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(Ortalama_Oran))
-
-yillik_ortalama <- veri_alanlar %>%
-  group_by(Yil) %>%
-  summarise(
-    Ortalama_Oran = mean(Beyin_Gocu_Orani),
-    .groups = "drop"
-  )
-```
 
 # Proje Genel Bakış ve Kapsamı
 
-Bu projenin amacı, Türkiye'deki yükseköğretim mezunlarının yurt dışına göçünü (beyin göçü) farklı boyutlarıyla incelemektir. Beyin göçü, gelişmekte olan ülkelerin en önemli sosyo-ekonomik sorunlarından biridir; çünkü ülkenin eğitime ayırdığı kaynaklarla yetiştirdiği nitelikli iş gücünün yurt dışına gitmesi, hem ekonomik bir kayıp hem de uzun vadeli kalkınma için ciddi bir engel oluşturur. Türkiye İstatistik Kurumu (TÜİK), 2024 yılı itibarıyla yükseköğretim mezunlarının beyin göçü oranının %2,0 olduğunu açıklamıştır; ancak bu ortalama oranın altında, eğitim alanına, cinsiyete, üniversite türüne ve eğitim diline göre çok daha çarpıcı farklılıklar bulunmaktadır.
+Bu projede Türkiye’de gerçekleşen ölüm olayları; yıl, cinsiyet ve ölüm nedeni değişkenleri açısından incelenmektedir. Çalışmanın temel amacı, ölüm nedenlerinin yıllar içerisindeki değişimini analiz etmek, kadın ve erkek ölüm sayıları arasındaki farklılıkları değerlendirmek ve en fazla ölüme neden olan hastalık veya dış etken gruplarını belirlemektir.
 
-Bu çalışmada beş farklı veri seti birlikte ele alınmıştır:
+Proje kapsamında veri seti R programlama dili kullanılarak analiz edilmiştir. Analiz sürecinde veri düzenleme, keşifsel veri analizi, görselleştirme, trend analizi ve basit model uydurma adımları uygulanmıştır. Elde edilen bulgular grafikler ve tablolar aracılığıyla yorumlanmıştır.
 
-1.  Eğitim ve öğretim alanlarına göre beyin göçü oranları (2021-2024)
-
-2.  Cinsiyete göre beyin göçü oranları (2021-2024)
-
-3.  Üniversite türüne (Devlet/Vakıf) ve burs durumuna göre beyin göçü oranları (2021-2024)
-
-4.  Göç edilen ülkelere göre yükseköğretim mezunlarının dağılımı (2023-2024)
-
-5.  Eğitim diline göre beyin göçü oranları (2024)
-
-6.  En yüksek beyin göçü oranına sahip lisans bölümleri (2023-2024)
-
-Analiz kapsamında dört temel soruya yanıt aranmıştır: (i) Hangi eğitim alanlarından mezun olanlar yurt dışına daha fazla göç ediyor? (ii) Cinsiyetler arasında beyin göçü açısından fark var mı ve bu fark yıllar içinde nasıl değişiyor? (iii) Vakıf ve devlet üniversitelerinden mezun olanların göç eğilimleri arasında nasıl bir fark vardır? (iv) Mezunlar en çok hangi ülkeleri tercih ediyor? Çalışma, sadece tanımlayıcı istatistiklerle yetinmeyip, basit doğrusal trend modelleri ile eğilimleri de incelemektedir.
+Bu çalışma, Türkiye’de ölüm nedenlerinin zaman içerisindeki değişimini anlamaya yönelik betimsel ve analitik bir inceleme sunmaktadır.
 
 # Veri
 
-Bu projede kullanılan veri setlerinin tamamı, Türkiye İstatistik Kurumu'nun (TÜİK) "Yükseköğretim Beyin Göçü İstatistikleri" haber bültenlerinden alınmıştır. TÜİK bu çalışmayı ilk kez 2024 yılında 2021-2023 dönemini kapsayacak şekilde yayımlamış, daha sonra 2025'te 2024 dönemine ait verileri açıklamıştır. Veriler; eğitim ve öğretim alanı, bölüm, cinsiyet, üniversite türü, eğitim dili ve göç edilen ülke ayrımlarında raporlanmaktadır.
+Bu projede kullanılan veri seti, Türkiye’de ölüm nedenlerini cinsiyet ve yıllara göre göstermektedir. Veri seti tidy data formatındadır. Yani her satır tek bir gözlemi temsil etmektedir.
+
+Veri setinde her gözlem belirli bir **yıl**, **cinsiyet** ve **ölüm nedeni** için gerçekleşen **ölüm sayısını** göstermektedir.
+
+Kullanılacak paketlerin yüklenmesi;
 
 ```{r}
-#| label: veri-ilk-bakis
 
-head(veri_alanlar, 10) %>%
-  kable(caption = "Eğitim alanlarına göre beyin göçü oranı verisinin ilk 10 satırı")
+#Paketlerin Yüklenmesi 
+library(tidyverse)
+library(readxl)
+library(scales)
+library(knitr)
+library(broom)
+
+#Verinin R ortamına aktarılması
+veri <- read_excel("olum_nedenleri_tidy.csv.xlsx")
+
+# Verinin genel yapısı
+glimpse(veri)
+
+#Verinin ilk satırları
+veri %>%
+  head(10) %>%
+  kable()
 ```
 
 ## Veri Kaynağı
 
-Veri seti TÜİK tarafından açıklanan "Yükseköğretim Beyin Göçü İstatistikleri" bültenlerinden derlenmiştir. TÜİK çalışmada veri kaynağı olarak Yükseköğretim Kurulu (YÖK) mezun kayıtları ile İçişleri Bakanlığı Nüfus ve Vatandaşlık İşleri Genel Müdürlüğü'nden (NVİGM) alınan Adrese Dayalı Nüfus Kayıt Sistemi (ADNKS) ve Merkezi Nüfus İdare Sistemi (MERNİS) kayıtlarını kullanmaktadır. Tanım gereği, beyin göçüne dahil edilen bireyler; lisans eğitimini Türkiye'de tamamlayıp mezuniyet sonrasında yurt dışında uzun süreli ikamet eden Türkiye Cumhuriyeti vatandaşlarıdır.
+Bu çalışmada kullanılan veri seti, Türkiye İstatistik Kurumu tarafından yayımlanan ölüm ve ölüm nedeni istatistiklerinden türetilmiştir. Veri seti analiz için uygun hale getirilerek tidy data formatına dönüştürülmüştür.
 
-Veri seti yıllık olarak yayımlanmakta ve coğrafi olarak Türkiye geneline ait toplulaştırılmış oranları içermektedir. Bu çalışmada altı farklı Excel dosyası kullanılmıştır: `beyin_gocu_alanlar.xlsx`, `beyin_gocu_cinsiyet.xlsx`, `beyin_gocu_universite.xlsx`, `beyin_gocu_ulke.xlsx`, `beyin_gocu_dil.xlsx` ve `beyin_gocu_bolum.xlsx`. Tüm dosyalar proje kökündeki `data/` klasöründe yer almakta ve `readxl` paketinin `read_excel()` fonksiyonu ile R ortamına aktarılmıştır.
+Türkiye İstatistik Kurumu, Türkiye’ye ilişkin resmi istatistikleri yayımlayan temel kamu kurumudur. Bu nedenle veri seti gerçek dünya verisi niteliği taşımaktadır ve Türkiye ile doğrudan ilişkilidir.
 
-```{r}
-#| label: veri-kaynak-kontrol
-
-unique(veri_alanlar$Yil)
-unique(veri_alanlar$Egitim_Alani)
-unique(veri_cinsiyet$Cinsiyet)
-unique(veri_universite$Universite_Turu)
-unique(veri_ulke$Ulke)
-```
+Veri Kaynağı Referansı : <https://veriportali.tuik.gov.tr/tr/press/54195>
 
 ## Veri Hakkında Genel Bilgiler
 
-Çalışmada kullanılan ana veri seti (`beyin_gocu_alanlar.xlsx`) toplam 40 gözlemden oluşmaktadır. Bu sayı, 10 eğitim alanı × 4 akademik yılın (2021, 2022, 2023, 2024) çarpımına eşittir. Veri setinde hem kategorik hem de sayısal değişkenler bulunmaktadır. `Egitim_Alani` kategorik bir değişken, `Yil` sıralı sayısal/kategorik bir değişken, `Beyin_Gocu_Orani` ise sürekli sayısal bir değişkendir ve yüzde (%) cinsindendir.
+Veri setinde temel olarak dört ana değişken bulunmaktadır:
+
+-   `yil`: Ölüm sayısının ait olduğu yıl
+
+-   `cinsiyet`: Kadın, Erkek veya Toplam bilgisi
+
+-   `olum_nedeni`: Ölüm nedeni kategorisi
+
+-   `olum_sayisi`: İlgili yıl, cinsiyet ve ölüm nedeni için ölüm sayısı
 
 ```{r}
-#| label: veri-yapi-boyut
 
-str(veri_alanlar)
-
-dim(veri_alanlar)
-
-summary(veri_alanlar)
-```
-
-```{r}
-#| label: veri-genel-tablo
-
-veri_alanlar %>%
+#Veri Setinin Genel Özeti
+veri %>%
   summarise(
-    Gozlem_Sayisi = n(),
-    Alan_Sayisi = n_distinct(Egitim_Alani),
-    Yil_Sayisi = n_distinct(Yil),
-    Genel_Ortalama_Yuzde = round(mean(Beyin_Gocu_Orani), 2),
-    En_Dusuk_Yuzde = round(min(Beyin_Gocu_Orani), 2),
-    En_Yuksek_Yuzde = round(max(Beyin_Gocu_Orani), 2)
+    toplam_satir = n(),
+    yil_sayisi = n_distinct(yil),
+    cinsiyet_sayisi = n_distinct(cinsiyet),
+    olum_nedeni_sayisi = n_distinct(olum_nedeni),
+    ilk_yil = min(yil),
+    son_yil = max(yil)
   ) %>%
-  kable(caption = "Ana veri setinin genel özet istatistikleri")
+  kable()
+
+#Değişken Türlerinin Kontrolü
+str(veri)
+
+#Cinsiyet Kategorileri
+veri %>%
+  distinct(cinsiyet) %>%
+  kable()
+
+#Ölüm Nedeni Kategorileri
+veri %>%
+  distinct(olum_nedeni) %>%
+  kable()
 ```
 
 ## Tercih Sebebi
 
-Beyin göçü, Türkiye'nin son yıllarda en çok tartışılan toplumsal ve ekonomik konularından biridir. Özellikle bilişim ve mühendislik gibi nitelikli iş gücünün yoğun olarak yetiştirildiği alanlarda yurt dışına çıkışların artması, hem üniversiteler hem politika yapıcılar açısından önem taşımaktadır. TÜİK'in bu veri setini ilk kez 2024 yılında yayımlamış olması, konunun resmi düzeyde de ciddiyetle ele alındığını göstermektedir.
+Bu veri setinin tercih edilmesinin temel nedeni, Türkiye’ye ilişkin gerçek ve toplumsal açıdan önemli bir konuyu ele almasıdır. Ölüm nedenleri, toplum sağlığı, yaşamsal riskler ve demografik yapı hakkında önemli bilgiler sunmaktadır.
 
-Bu veri setinin tercih edilmesinin temel nedenleri şunlardır: birincisi, açık erişimli ve resmi bir kaynaktan (TÜİK) sağlanması, çalışmanın güvenilirliğini artırmaktadır. İkincisi, veri seti farklı boyutları (alan, cinsiyet, üniversite türü, ülke, dil) bir arada sunduğu için zengin bir analiz çerçevesi sağlamaktadır. Üçüncüsü, eğitim alanları arasındaki büyük farklar (örneğin bilişim alanında %6,7, eğitim alanında %0,7) çarpıcı bir karşılaştırma fırsatı sunmaktadır. Son olarak, veri yıllık olarak güncellendiği için trend analizine de imkan vermektedir.
+Veri setinde yıllara göre değişim bulunduğu için trend analizi yapılabilmektedir. Ayrıca cinsiyet değişkeni sayesinde kadın ve erkek ölüm sayıları karşılaştırılabilmektedir. Ölüm nedeni değişkeni ise hangi nedenlerin daha fazla ölüme yol açtığını inceleme imkânı sağlamaktadır.
 
-```{r}
-#| label: alan-bazinda-ozet
-
-alan_ortalama %>%
-  rename(
-    `Eğitim Alanı` = Egitim_Alani,
-    `Ortalama Oran (%)` = Ortalama_Oran,
-    `Min Oran (%)` = Min_Oran,
-    `Max Oran (%)` = Max_Oran
-  ) %>%
-  kable(digits = 2,
-        caption = "Eğitim alanlarına göre 2021-2024 dönemi özet istatistikleri")
-```
+Bu yönleriyle veri seti; keşifsel veri analizi, görselleştirme, karşılaştırmalı analiz ve basit modelleme çalışmaları için uygundur.
 
 ## Ön İşleme
 
-TÜİK'in orijinal Excel çıktısı, üst kısımda meta veri (gözlem sıklığı, coğrafi kapsam) ve yıl başlıkları içeren, R için doğrudan kullanılmaya uygun olmayan geniş (wide) formatta bir tablodur. Analize başlamadan önce veri seti R ortamı için uzun (long) formata dönüştürülmüştür. Bu işlemde her satır artık tek bir gözlemi (bir eğitim alanının belirli bir yıldaki beyin göçü oranını) temsil edecek şekilde yeniden düzenlenmiştir. Bu dönüşüm `tidyverse` ilkelerine uygun olarak yapılmış ve grafiklerde kategoriler kolaylıkla `aes()` içine yerleştirilebilir hale gelmiştir.
+Bu bölümde veri seti analiz için uygun hale getirilmiştir. Öncelikle değişkenlerin veri tipleri düzenlenmiş, ardından analizlerde kullanılacak alt veri setleri oluşturulmuştur.
 
-İkinci olarak, kullanılan tüm veri setlerinin kolon adları Türkçe karakter (ı, ğ, ü, ş, ö, ç) içermeyecek şekilde sadeleştirilmiştir; çünkü Türkçe karakterler farklı işletim sistemleri arasında kodlama sorunları (encoding) çıkarabilmektedir. Bu sayede dosya hem Windows hem de Linux/Mac üzerinde sorunsuz çalışabilmektedir. Üçüncü olarak, `Yil` değişkeni hem `integer` (modelleme için) hem de `factor` (grafiklerde sıralı eksen için) olarak ayrı ayrı saklanmıştır.
+Tüm nedenler satırı, toplam ölüm sayısını gösterdiği için genel ölüm trendi analizlerinde kullanılmıştır. Ancak ölüm nedenlerini ayrı ayrı incelemek istediğimiz bölümlerde bu satır analiz dışında bırakılmıştır.
+
+Ayrıca cinsiyet karşılaştırması yapılacak analizlerde yalnızca Erkek ve Kadın kategorileri kullanılmıştır.
 
 ```{r}
-#| label: eksik-veri-kontrol
 
-veri_alanlar %>%
+#Veri Tiplerinin Düzenlenmesi
+veri <- veri %>%
+  mutate(
+    yil = as.numeric(yil),
+    olum_sayisi = as.numeric(olum_sayisi),
+    cinsiyet = as.character(cinsiyet),
+    olum_nedeni = as.character(olum_nedeni)
+  )
+
+#Eksik Veri Kontrolü
+veri %>%
   summarise(
-    Eksik_Yil = sum(is.na(Yil)),
-    Eksik_Alan = sum(is.na(Egitim_Alani)),
-    Eksik_Oran = sum(is.na(Beyin_Gocu_Orani))
+    eksik_yil = sum(is.na(yil)),
+    eksik_cinsiyet = sum(is.na(cinsiyet)),
+    eksik_olum_nedeni = sum(is.na(olum_nedeni)),
+    eksik_olum_sayisi = sum(is.na(olum_sayisi))
   ) %>%
-  kable(caption = "Ana veri setinde eksik (NA) değer kontrolü")
-```
+  kable()
 
-```{r}
-#| label: temizlenmis-veri-gosterimi
+#Analiz İçin Alt Veri Setlerinin Oluşturulması
+# Toplam cinsiyet satırları
+veri_toplam <- veri %>%
+  filter(cinsiyet == "Toplam")
 
-veri_alanlar %>%
-  filter(Egitim_Alani == "Bilisim ve iletisim teknolojileri") %>%
-  kable(caption = "Bilişim alanı için temizlenmiş veri (uzun format örneği)")
+# Sadece erkek ve kadın satırları
+veri_cinsiyet <- veri %>%
+  filter(cinsiyet %in% c("Erkek", "Kadın"))
+
+# Tüm nedenler hariç ölüm nedenleri
+veri_neden <- veri %>%
+  filter(olum_nedeni != "Tüm nedenler")
+
+# Toplam cinsiyet için ölüm nedenleri
+veri_neden_toplam <- veri %>%
+  filter(
+    cinsiyet == "Toplam",
+    olum_nedeni != "Tüm nedenler"
+  )
+
+# Erkek ve kadın için ölüm nedenleri
+veri_neden_cinsiyet <- veri %>%
+  filter(
+    cinsiyet %in% c("Erkek", "Kadın"),
+    olum_nedeni != "Tüm nedenler"
+  )
 ```
 
 # Analiz
 
-Bu bölümde veri seti farklı açılardan incelenmiştir. Önce keşifsel veri analizi (EDA) yapılmış; alanlar arası farklılıklar, yıllar arası değişimler ve cinsiyet/üniversite türü gibi alt grup karşılaştırmaları görselleştirilmiştir. Daha sonra yıllar arası trend analizi yapılmış; hangi alanlarda artış, hangilerinde azalış olduğu belirlenmiştir. Son olarak basit doğrusal regresyon modelleri ile eğilim katsayıları hesaplanmıştır.
+Bu bölümde veri seti üzerinde temel analizler yapılmıştır. Analizler üç ana eksende yürütülmüştür.
 
-```{r}
-#| label: yillik-ortalama-tablo
+İlk olarak yıllara göre toplam ölüm sayıları incelenmiştir. İkinci olarak ölüm nedenlerine göre toplam ölüm sayıları karşılaştırılmıştır. Üçüncü olarak ise kadın ve erkek ölüm sayıları arasındaki farklılıklar değerlendirilmiştir.
 
-yillik_ortalama %>%
-  rename(`Yıl` = Yil, `Ortalama Oran (%)` = Ortalama_Oran) %>%
-  kable(digits = 3,
-        caption = "Yıllara göre 10 alanın ortalama beyin göçü oranı")
-```
+Bu analizler sayesinde ölüm sayılarının zaman içerisindeki değişimi, öne çıkan ölüm nedenleri ve cinsiyete göre farklılaşmalar ortaya konulmuştur.\
 
 ## Keşifsel Veri Analizi
 
-Bu bölümde veri grafikler aracılığıyla görsel olarak incelenmiştir. Her grafik kendi başına bir alt soruyu yanıtlamayı amaçlamaktadır.
+Keşifsel veri analizi kapsamında veri setinin genel yapısı, yıllara göre toplam ölüm sayısı, ölüm nedenlerine göre dağılım ve cinsiyete göre ölüm sayıları incelenmiştir.\
 
-### Eğitim Alanlarına Göre Beyin Göçü Oranı (Yıllara Göre)
-
-Aşağıdaki çizgi grafiği, 10 farklı eğitim alanının 2021-2024 dönemindeki beyin göçü oranlarını birlikte göstermektedir. Bu grafik, alanlar arasındaki farkın ne kadar büyük olduğunu ortaya koymakta ve aynı zamanda yıllar içindeki değişimi de görselleştirmektedir.
+### Yıllara Göre Toplam Ölüm Sayısı
 
 ```{r}
-#| label: grafik-alan-cizgi
-#| fig-width: 11
-#| fig-height: 6
+toplam_olum <- veri %>%
+  mutate(
+    cinsiyet = str_squish(as.character(cinsiyet)),
+    olum_nedeni = str_squish(as.character(olum_nedeni)),
+    yil = as.numeric(yil),
+    olum_sayisi = as.numeric(olum_sayisi)
+  ) %>%
+  filter(
+    cinsiyet == "Toplam",
+    str_detect(olum_nedeni, "^T.m nedenler$")
+  ) %>%
+  arrange(yil)
 
-ggplot(veri_alanlar,
-       aes(x = Yil, y = Beyin_Gocu_Orani, color = Egitim_Alani, group = Egitim_Alani)) +
-  geom_line(linewidth = 1.1) +
-  geom_point(size = 2.5) +
-  scale_x_continuous(breaks = 2021:2024) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+toplam_olum %>%
+  select(yil, cinsiyet, olum_nedeni, olum_sayisi) %>%
+  kable()
+
+ggplot(toplam_olum, aes(x = yil, y = olum_sayisi, group = 1)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = comma) +
   labs(
-    title = "Eğitim Alanlarına Göre Beyin Göçü Oranı (2021-2024)",
-    x = "Yıl",
-    y = "Beyin Göçü Oranı (%)",
-    color = "Eğitim Alanı"
+    title = "Yillara Gore Toplam Olum Sayisi",
+    x = "Yil",
+    y = "Olum Sayisi"
+  ) +
+  theme_minimal()
+```
+
+Grafik incelendiğinde, 2018 ve 2019 yıllarında toplam ölüm sayısının görece daha düşük ve birbirine yakın seviyelerde olduğu görülmektedir. 2020 yılında ise toplam ölüm sayısında belirgin bir artış başlamış, 2021 yılında bu artış en yüksek seviyeye ulaşmıştır.
+
+2021 yılındaki bu belirgin yükseliş, ölüm nedenleri açısından değerlendirildiğinde COVID-19 salgınının etkisiyle açıklanabilir. TÜİK verilerine göre toplam ölüm sayısı 2020 yılında 507 bin 938 iken, 2021 yılında %11,4 artarak 565 bin 594’e yükselmiştir. Ayrıca COVID-19 kaynaklı ölüm sayısı 2021 yılında 65 bin 198 olarak açıklanmıştır. Bu nedenle 2021 yılındaki toplam ölüm sayısındaki zirvenin önemli nedenlerinden biri COVID-19 kaynaklı ölümlerdir.
+
+2022 yılında toplam ölüm sayısının düşmesi, COVID-19 kaynaklı ölüm etkisinin önceki yıla göre azalmasıyla ilişkilendirilebilir. 2023 yılında yeniden bir artış görülse de bu artış 2021 seviyesine ulaşmamıştır. 2024 yılında ise toplam ölüm sayısında tekrar azalış görülmektedir.
+
+Genel olarak grafik, 2020-2021 döneminde toplam ölüm sayılarında olağan dışı bir yükseliş yaşandığını göstermektedir. Ölüm nedenleri dikkate alındığında, özellikle 2021 yılındaki artışın COVID-19 salgınıyla güçlü biçimde ilişkili olduğu söylenebilir. Bu nedenle toplam ölüm eğilimini yorumlarken COVID-19’un dönemsel etkisi ayrıca dikkate alınmalıdır.
+
+### Ölüm Nedenlerine Göre Toplam Ölüm Sayısı
+
+```{r}
+en_fazla_neden <- veri_neden_toplam %>%
+  group_by(olum_nedeni) %>%
+  summarise(
+    toplam_olum = sum(olum_sayisi, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(toplam_olum))
+
+en_fazla_neden %>%
+  kable()
+
+```
+
+### En Fazla Ölüm Görülen İlk 10 Neden
+
+```{r}
+en_fazla_neden %>%
+  mutate(
+    olum_nedeni = str_squish(as.character(olum_nedeni))
+  ) %>%
+  filter(
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  ) %>%
+  slice_max(order_by = toplam_olum, n = 10) %>%
+  ggplot(aes(
+    x = reorder(olum_nedeni, toplam_olum),
+    y = toplam_olum,
+    fill = olum_nedeni
+  )) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "En Fazla Olum Gorulen Ilk 10 Olum Nedeni",
+    x = "Olum Nedeni",
+    y = "Toplam Olum Sayisi",
+    fill = "Olum Nedeni"
   ) +
   theme_minimal() +
-  theme(legend.position = "right",
-        legend.text = element_text(size = 8))
+  theme(
+    legend.position = "none"
+  )
 ```
 
-Grafik incelendiğinde, bilişim ve iletişim teknolojileri alanının diğer tüm alanlardan belirgin biçimde ayrıştığı görülmektedir. Bu alan dört yıl boyunca %6,7 ile %7,3 arasında değerler almıştır; yani her 100 mezundan yaklaşık 7'si yurt dışında uzun süreli ikamet etmektedir. Mühendislik, imalat ve inşaat ikinci sırada (%4,4-4,6) yer almakta; doğa bilimleri ise üçüncü grubu oluşturmaktadır (%2,5-2,7). Eğitim, sağlık ve tarım alanlarının ise %1'in altında kalan oranlarla en az göç veren alanlar olduğu görülmektedir. Yıllar içinde dramatik bir değişim gözlenmemektedir, ancak bilişim alanında hafif bir azalış, doğa bilimlerinde ise hafif bir artış dikkat çekicidir.
+Tablo ve grafik, analiz edilen yıllar boyunca ölüm nedenlerine göre toplam ölüm sayılarını göstermektedir. İlk satırda yer alan “Tüm nedenler” değeri, bütün ölüm nedenlerinin toplamını ifade etmektedir. Bu nedenle toplam ölüm sayısı 3.455.773 olarak görülmektedir.\
+\
+Ölüm nedenleri ayrı ayrı incelendiğinde, en yüksek ölüm sayısının “Dolaşım sistemi hastalıkları” kategorisinde olduğu görülmektedir. Bu kategoride toplam 1.231.623 ölüm gerçekleşmiştir. Bu durum, kalp ve damar hastalıklarının toplam ölümler içerisinde en önemli paya sahip olduğunu göstermektedir.\
+\
+İkinci sırada “İyi huylu ve kötü huylu tümörler” yer almaktadır. Bu kategoride toplam 558.414 ölüm görülmüştür. Bu sonuç, kanser ve tümör kaynaklı ölümlerin Türkiye’de önemli ölüm nedenleri arasında yer aldığını göstermektedir.\
+\
+Üçüncü sırada ise “Solunum sistemi hastalıkları” bulunmaktadır. Bu kategoride toplam 477.604 ölüm gerçekleşmiştir. Solunum sistemi hastalıklarının yüksek seviyede olması, özellikle yaşlı nüfus, kronik hastalıklar ve salgın dönemleri gibi faktörlerle ilişkilendirilebilir.\
+\
+Verilerde dikkat çeken bir diğer kategori “COVID-19”dur. COVID-19 kaynaklı ölüm sayısı 111.612 olarak görülmektedir. Bu değer, özellikle 2020 ve 2021 yıllarında toplam ölüm sayılarındaki artışı açıklamada önemli bir etkendir.\
+\
+Genel olarak, toplam ölümlerin büyük bölümünün kronik hastalık gruplarından kaynaklandığını göstermektedir. Özellikle dolaşım sistemi hastalıkları, tümörler ve solunum sistemi hastalıkları en baskın ölüm nedenleri olarak öne çıkmaktadır. COVID-19 ise dönemsel etkisi nedeniyle toplam ölüm sayıları üzerinde belirgin bir artış yaratmış özel bir ölüm nedeni olarak değerlendirilebilir.
 
-### 2024 Yılında Eğitim Alanlarının Sıralaması
+### Cinsiyete Göre Toplam Ölüm Sayısı
 
-Aşağıdaki yatay sütun grafiği, en güncel yıl olan 2024 verileri üzerinden alanların sıralanmasını göstermektedir.
+Bu bölümde yalnızca `Erkek` ve `Kadın` kategorileri kullanılmıştır. `Toplam` kategorisi bu karşılaştırmaya dahil edilmemiştir.
 
 ```{r}
-#| label: grafik-2024-siralama
-#| fig-width: 10
-#| fig-height: 6
+cinsiyet_toplam <- veri %>%
+  mutate(
+    cinsiyet = str_squish(as.character(cinsiyet)),
+    olum_nedeni = str_squish(as.character(olum_nedeni)),
+    yil = as.numeric(yil),
+    olum_sayisi = as.numeric(olum_sayisi)
+  ) %>%
+  filter(
+    cinsiyet %in% c("Erkek", "Kadın"),
+    str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  ) %>%
+  arrange(cinsiyet, yil)
 
-veri_alanlar %>%
-  filter(Yil == 2024) %>%
-  ggplot(aes(x = reorder(Egitim_Alani, Beyin_Gocu_Orani), y = Beyin_Gocu_Orani)) +
-  geom_col(fill = "#2E86AB") +
-  geom_text(aes(label = paste0(round(Beyin_Gocu_Orani, 1), "%")),
-            hjust = -0.1, size = 3.5) +
-  coord_flip() +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(0, 8)) +
+ggplot(cinsiyet_toplam, aes(x = yil, y = olum_sayisi, color = cinsiyet, group = cinsiyet)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = comma) +
   labs(
-    title = "2024 Yılı Beyin Göçü Oranı (Eğitim Alanına Göre)",
-    x = "Eğitim Alanı",
-    y = "Beyin Göçü Oranı (%)"
+    title = "Cinsiyete Gore Toplam Olum Sayisi",
+    x = "Yil",
+    y = "Olum Sayisi",
+    color = "Cinsiyet"
   ) +
   theme_minimal()
 ```
 
-2024 yılı sıralaması, 2021-2024 dönemindeki genel eğilimle uyumludur. Bilişim ve iletişim teknolojileri %6,7 ile ilk sırada yer almakta; mühendislik (%4,4) ve doğa bilimleri (%2,7) onu izlemektedir. Eğitim fakültesi mezunları yalnızca %0,7 oranıyla en az göç veren grubu oluşturmaktadır. Bu sıralama, küresel iş gücü piyasasında STEM (Bilim, Teknoloji, Mühendislik, Matematik) alanlarına yönelik talebin yüksek olmasıyla doğrudan ilişkilidir; çünkü bu alanlarda diploma uluslararası transfer edilebilir niteliktedir ve dil engeli görece daha düşüktür.
-
-### Alan ve Yıl Bazında Isı Haritası
-
-Aşağıdaki ısı haritası, alan ve yıl kombinasyonlarındaki beyin göçü oranlarını görsel olarak özetlemektedir.
+### Kadın-Erkek Ölüm Farkı
 
 ```{r}
-#| label: grafik-isi-haritasi
-#| fig-width: 10
-#| fig-height: 6
+cinsiyet_toplam_duzenli <- cinsiyet_toplam %>%
+  mutate(
+    cinsiyet = case_when(
+      cinsiyet == "Kadın" ~ "Kadin",
+      cinsiyet == "Erkek" ~ "Erkek",
+      TRUE ~ cinsiyet
+    )
+  )
 
-veri_alanlar %>%
-  ggplot(aes(x = factor(Yil), y = reorder(Egitim_Alani, Beyin_Gocu_Orani),
-             fill = Beyin_Gocu_Orani)) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_text(aes(label = paste0(round(Beyin_Gocu_Orani, 1), "%")),
-            color = "black", size = 3.5) +
-  scale_fill_gradient(low = "#D9EAF7", high = "#A23B72",
-                      labels = function(x) paste0(x, "%")) +
-  labs(
-    title = "Eğitim Alanı ve Yıl Bazında Beyin Göçü Oranı (Isı Haritası)",
-    x = "Yıl",
-    y = "Eğitim Alanı",
-    fill = "Oran (%)"
-  ) +
-  theme_minimal()
+cinsiyet_fark <- cinsiyet_toplam_duzenli %>%
+  pivot_wider(
+    names_from = cinsiyet,
+    values_from = olum_sayisi
+  ) %>%
+  mutate(
+    erkek_kadin_farki = Erkek - Kadin,
+    erkek_orani = Erkek / (Erkek + Kadin) * 100,
+    kadin_orani = Kadin / (Erkek + Kadin) * 100
+  )
+
+cinsiyet_fark %>%
+  kable(digits = 2)
 ```
 
-Isı haritası, koyu renklerin (mor) yüksek göç oranlarını temsil ettiği bir görsel sunmaktadır. Görselden anlaşıldığı üzere, bilişim alanı dört yıl boyunca en koyu renge sahip satırdır; eğitim, sağlık ve tarım ise sürekli olarak en açık renklerle temsil edilmektedir. Bu görsel, sayısal verilerin tek bakışta bütüncül olarak değerlendirilmesini sağlamaktadır.
+2018 ve 2019 yıllarında hem kadın hem erkek ölüm sayıları birbirine yakın bir seyir izlerken, 2020 yılında iki cinsiyette de belirgin bir artış yaşanmıştır. 2021 yılındaki bu yükseliş, COVID-19 salgınının toplam ölüm sayıları üzerindeki etkisiyle ilişkilendirilebilir.
 
-### Cinsiyete Göre Beyin Göçü Karşılaştırması
+Grafik ve tablo incelendiğinde, 2020-2021 döneminde hem erkeklerde hem kadınlarda toplam ölüm sayısında artış yaşandığı görülmektedir. Ancak bu dönemde kadın ölüm sayısındaki artış eğimi erkeklere göre daha belirgin görünmektedir. Bu durum, kadınlarda ölüm sayısının 2020’den 2021’e geçerken oransal olarak daha hızlı arttığını düşündürmektedir.\
+\
+Erkek ölüm sayısı her yıl kadın ölüm sayısından yüksek olmasına rağmen, 2020-2021 dönemindeki artış hızı kadınlarda daha dikkat çekicidir. Bu nedenle yalnızca toplam ölüm sayısına bakmak yerine, yıllık değişim oranlarını cinsiyet bazında incelemek daha doğru bir değerlendirme sağlar.
 
-Aşağıdaki grafik, kadın, erkek ve genel beyin göçü oranlarını yıllara göre karşılaştırmaktadır.
+### İlk 5 Ölüm Nedeninin Belirlenmesi
 
 ```{r}
-#| label: grafik-cinsiyet
-#| fig-width: 9
-#| fig-height: 5
+ilk5_neden <- en_fazla_neden %>%
+  mutate(
+    olum_nedeni = str_squish(as.character(olum_nedeni))
+  ) %>%
+  filter(
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  ) %>%
+  slice_max(order_by = toplam_olum, n = 5) %>%
+  pull(olum_nedeni)
 
-veri_cinsiyet %>%
-  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani, color = Cinsiyet, group = Cinsiyet)) +
-  geom_line(linewidth = 1.3) +
-  geom_point(size = 3.5) +
-  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
-            vjust = -1, size = 3.2, show.legend = FALSE) +
-  scale_x_continuous(breaks = 2021:2024) +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(1.2, 2.8)) +
-  scale_color_manual(values = c("Genel" = "#666666",
-                                "Kadin" = "#E63946",
-                                "Erkek" = "#1D3557")) +
-  labs(
-    title = "Cinsiyete Göre Beyin Göçü Oranı (2021-2024)",
-    x = "Yıl",
-    y = "Beyin Göçü Oranı (%)",
-    color = "Grup"
-  ) +
-  theme_minimal()
+ilk5_neden
 ```
 
-Cinsiyet karşılaştırması belirgin bir farkı ortaya koymaktadır: erkeklerde beyin göçü oranı (%2,3-2,4) kadınlardan (%1,6) yaklaşık 0,8 puan daha yüksektir. Bu fark dört yıl boyunca neredeyse hiç değişmemiştir. Erkeklerin yurt dışı göçe daha fazla yönelmesinin temel nedeni, beyin göçünün yoğunlaştığı alanların (bilişim, mühendislik, doğa bilimleri) erkek mezun ağırlıklı olması ve bu alanlarda küresel iş gücü piyasasının talebinin yüksek olmasıdır. Ayrıca toplumsal cinsiyet rollerinin de bu farkı etkilediği literatürde sıkça dile getirilmektedir.
-
-### Üniversite Türüne Göre Beyin Göçü
-
-Aşağıdaki grafik, devlet ve vakıf üniversitesi mezunları ile vakıf üniversitelerinin burs durumuna göre alt gruplarını karşılaştırmaktadır.
+### İlk 5 Ölüm Nedeninde Cinsiyete Göre Dağılım
 
 ```{r}
-#| label: grafik-universite
-#| fig-width: 10
-#| fig-height: 5.5
+# Cinsiyet ve ölüm nedeni bazlı veriyi hazırlama
+veri_neden_cinsiyet <- veri %>%
+  mutate(
+    cinsiyet = str_squish(as.character(cinsiyet)),
+    cinsiyet = case_when(
+      cinsiyet == "Kadın" ~ "Kadin",
+      cinsiyet == "Erkek" ~ "Erkek",
+      TRUE ~ cinsiyet
+    ),
+    olum_nedeni = str_squish(as.character(olum_nedeni)),
+    yil = as.numeric(yil),
+    olum_sayisi = as.numeric(olum_sayisi)
+  ) %>%
+  filter(
+    cinsiyet %in% c("Erkek", "Kadin"),
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  )
 
-veri_universite %>%
-  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani,
-             color = Universite_Turu, group = Universite_Turu)) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3) +
-  scale_x_continuous(breaks = 2021:2024) +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(0, 10)) +
-  labs(
-    title = "Üniversite Türü ve Burs Durumuna Göre Beyin Göçü Oranı",
-    x = "Yıl",
-    y = "Beyin Göçü Oranı (%)",
-    color = "Grup"
-  ) +
-  theme_minimal()
-```
+# Tüm nedenler çıkarılarak ilk 5 ölüm nedeni belirlenir
+ilk5_neden <- en_fazla_neden %>%
+  mutate(
+    olum_nedeni = str_squish(as.character(olum_nedeni))
+  ) %>%
+  filter(
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  ) %>%
+  slice_max(order_by = toplam_olum, n = 5) %>%
+  pull(olum_nedeni)
 
-Üniversite türü değişkeni belki de en çarpıcı farklılaşmayı ortaya koymaktadır. Devlet üniversitesi mezunlarında oran sabit biçimde %1,7 düzeyinde seyrederken, vakıf üniversitesi mezunlarında bu oran %4,3-4,6 aralığındadır; yani vakıf mezunları devlet mezunlarına göre yaklaşık 2,5 kat daha yüksek bir oranda yurt dışına göç etmektedir. Daha da çarpıcı olan, vakıf üniversitelerinde **tam burslu** okuyan öğrencilerin göç oranının %8,3-8,6 düzeyinde olmasıdır. Bu durum, vakıf üniversitelerinin tam burslu kontenjanlarına yüksek puanla giren, akademik olarak başarılı öğrencilerin yurt dışı kariyer fırsatlarını daha yoğun değerlendirdiğini düşündürmektedir.
+# Cinsiyet ve ölüm nedeni bazında toplam ölüm sayısı
+cinsiyet_neden_ozet <- veri_neden_cinsiyet %>%
+  group_by(olum_nedeni, cinsiyet) %>%
+  summarise(
+    toplam_olum = sum(olum_sayisi, na.rm = TRUE),
+    .groups = "drop"
+  )
 
-### Göç Edilen Ülkelere Göre Dağılım
+# Yüzdesel dağılım hesabı
+cinsiyet_neden_yuzde <- cinsiyet_neden_ozet %>%
+  filter(olum_nedeni %in% ilk5_neden) %>%
+  group_by(olum_nedeni) %>%
+  mutate(
+    neden_toplami = sum(toplam_olum),
+    yuzde = toplam_olum / neden_toplami * 100
+  ) %>%
+  ungroup()
 
-Aşağıdaki sütun grafiği, mezunların yurt dışı tercihlerini ülke bazında göstermektedir.
-
-```{r}
-#| label: grafik-ulke
-#| fig-width: 10
-#| fig-height: 5.5
-
-veri_ulke %>%
-  ggplot(aes(x = reorder(Ulke, Pay_Yuzdesi), y = Pay_Yuzdesi, fill = factor(Yil))) +
+cinsiyet_neden_yuzde %>%
+  kable(digits = 2)
+cinsiyet_neden_yuzde %>%
+  ggplot(aes(
+    x = reorder(olum_nedeni, neden_toplami),
+    y = yuzde,
+    fill = cinsiyet
+  )) +
   geom_col(position = "dodge") +
-  geom_text(aes(label = paste0(Pay_Yuzdesi, "%")),
-            position = position_dodge(width = 0.9),
-            hjust = -0.1, size = 3) +
   coord_flip() +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(0, 25)) +
-  scale_fill_manual(values = c("2023" = "#264653", "2024" = "#E76F51")) +
   labs(
-    title = "Göç Edilen İlk 5 Ülke (2023 vs 2024)",
-    x = "Ülke",
-    y = "Mezun Payı (%)",
-    fill = "Yıl"
+    title = "Ilk 5 Olum Nedeninde Cinsiyete Gore Yuzdesel Dagilim",
+    x = "Olum Nedeni",
+    y = "Yuzde (%)",
+    fill = "Cinsiyet"
   ) +
   theme_minimal()
 ```
 
-Mezunların tercih ettiği ülkeler sıralamasında ABD birinci sıradadır; ancak 2023'ten 2024'e geçişte ABD'nin payı %21,4'ten %19,6'ya düşerken, Almanya'nın payı %17,5'ten %19,4'e yükselmiştir. Bu durum, ABD'ye vize alma süreçlerinin son yıllarda zorlaşması ve Almanya'nın özellikle bilişim ve mühendislik alanlarında nitelikli iş gücüne yönelik kapılarını açan vize politikaları ile açıklanabilir. Birleşik Krallık, Hollanda ve Kanada görece istikrarlı paylara sahiptir.
+Grafik, en fazla ölüm görülen ilk 5 ölüm nedeni içinde kadın ve erkeklerin yüzdesel dağılımını göstermektedir. Bu grafik mutlak ölüm sayılarını değil, her ölüm nedeni içerisinde kadın ve erkek payının yüzde olarak nasıl dağıldığını göstermesi açısından önemlidir.\
+\
+Dolaşım sistemi hastalıklarında kadın ve erkek oranlarının birbirine oldukça yakın olduğu görülmektedir. Erkeklerin oranı kadınlara göre çok az daha yüksek olsa da, bu ölüm nedeni her iki cinsiyet için de benzer düzeyde önemli bir risk oluşturmaktadır.\
+\
+İyi huylu ve kötü huylu tümörler kategorisinde erkeklerin yüzdesel payı kadınlara göre belirgin şekilde daha yüksektir. Grafiğe göre bu kategoride erkeklerin oranı yaklaşık %60’ın üzerinde, kadınların oranı ise yaklaşık %40 seviyesindedir. Bu durum, tümör kaynaklı ölümlerin erkeklerde daha yüksek oranda görüldüğünü göstermektedir.\
+\
+Solunum sistemi hastalıklarında da erkeklerin payı kadınlardan fazladır. Erkek oranı yaklaşık %55-60 aralığında iken kadın oranı yaklaşık %40-45 aralığındadır. Bu sonuç, solunum sistemi hastalıklarının erkeklerde daha yüksek ölüm yükü oluşturduğunu göstermektedir.\
+\
+“Bilinmeyen” ölüm nedeni kategorisinde de erkeklerin oranı kadınlardan belirgin şekilde yüksektir. Bu kategori, ölüm nedeninin net sınıflandırılamadığı durumları içerdiği için yorumlanırken dikkatli değerlendirilmelidir.\
+\
+İç salgı bezi, beslenme ve metabolizmayla ilgili hastalıklar kategorisinde ise diğer kategorilerden farklı olarak kadınların payı erkeklerden daha yüksektir. Kadın oranının yaklaşık %55, erkek oranının ise yaklaşık %45 seviyesinde olduğu görülmektedir. Bu durum, bu hastalık grubunda kadın ölümlerinin erkeklere göre daha yüksek paya sahip olduğunu göstermektedir.\
+\
+Genel olarak grafik, ölüm nedenlerinin cinsiyete göre farklı dağılım gösterdiğini ortaya koymaktadır. Erkekler özellikle tümörler, solunum sistemi hastalıkları ve bilinmeyen nedenlerde daha yüksek paya sahipken; kadınlar iç salgı bezi, beslenme ve metabolizma hastalıklarında daha yüksek orana sahiptir. Dolaşım sistemi hastalıklarında ise kadın ve erkek oranları birbirine daha yakındır.
 
-### Eğitim Diline Göre Beyin Göçü
+### Box Plot ile Ölüm Sayılarının Dağılımı
 
-Aşağıdaki grafik, eğitim diline göre 2024 yılı beyin göçü oranını göstermektedir. TÜİK'in bu alt-değişkeni yalnızca 2024 için ayrıntılı raporladığı için tek yıl gösterilmiştir.
-
-```{r}
-#| label: grafik-dil
-#| fig-width: 9
-#| fig-height: 5
-
-veri_dil %>%
-  ggplot(aes(x = reorder(Egitim_Dili, Beyin_Gocu_Orani), y = Beyin_Gocu_Orani)) +
-  geom_col(fill = "#F4A261") +
-  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
-            hjust = -0.2, size = 4) +
-  coord_flip() +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(0, 12)) +
-  labs(
-    title = "Eğitim Diline Göre Beyin Göçü Oranı (2024)",
-    x = "Eğitim Dili",
-    y = "Beyin Göçü Oranı (%)"
-  ) +
-  theme_minimal()
-```
-
-Eğitim dili bazlı analiz oldukça ilgi çekicidir. Türkiye'de Fransızca eğitim alan mezunların beyin göçü oranı %9,9 ile diğer tüm gruplardan açık ara yüksektir. Bunu İngilizce (%6,2), Almanca (%5,9) ve Rusça (%4,7) eğitim alanlar takip etmektedir. Türkçe eğitim alanlar ise %1,5 ile en düşük orana sahiptir. Bu durum, yabancı dilde eğitim alan mezunların hem dil yetkinlikleri hem de uluslararası akademik ağlara erişim kolaylıkları sayesinde yurt dışı kariyere daha kolay yöneldiğini göstermektedir.
-
-### Lisans Bölümü Bazında En Yüksek Beyin Göçü
-
-Aşağıdaki tablo ve grafik, bölüm bazında en yüksek beyin göçü oranına sahip lisans programlarını göstermektedir. Bu detay, alan ortalamalarının arkasında çok daha yüksek oranlar olduğunu açığa çıkarmaktadır.
+Bu bölümde ölüm sayılarının ölüm nedenlerine göre dağılımı box plot grafiği ile incelenmiştir. Box plot grafiği, her ölüm nedeni için ölüm sayılarının medyanını, yayılımını ve olası uç değerleri göstermektedir.
 
 ```{r}
-#| label: grafik-bolum
-#| fig-width: 11
-#| fig-height: 6
+boxplot_veri <- veri_neden_toplam %>%
+  group_by(olum_nedeni) %>%
+  mutate(toplam_neden_olum = sum(olum_sayisi, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(olum_nedeni %in% ilk5_neden)
 
-veri_bolum %>%
-  ggplot(aes(x = reorder(Bolum, Beyin_Gocu_Orani),
-             y = Beyin_Gocu_Orani, fill = factor(Yil))) +
-  geom_col(position = "dodge") +
-  geom_text(aes(label = paste0(Beyin_Gocu_Orani, "%")),
-            position = position_dodge(width = 0.9),
-            hjust = -0.1, size = 3) +
+ggplot(boxplot_veri, aes(
+  x = reorder(olum_nedeni, toplam_neden_olum),
+  y = olum_sayisi,
+  fill = olum_nedeni
+)) +
+  geom_boxplot() +
   coord_flip() +
-  scale_y_continuous(labels = function(x) paste0(x, "%"),
-                     limits = c(0, 22)) +
-  scale_fill_manual(values = c("2023" = "#2A9D8F", "2024" = "#E9C46A")) +
+  scale_y_log10(labels = comma) +
   labs(
-    title = "En Yüksek Beyin Göçü Oranına Sahip Lisans Bölümleri",
-    x = "Bölüm",
-    y = "Beyin Göçü Oranı (%)",
-    fill = "Yıl"
-  ) +
-  theme_minimal()
-```
-
-Bölüm bazında bakıldığında, **moleküler biyoloji ve genetik** mezunlarının %15-18 gibi çok yüksek bir oranla yurt dışına gittiği görülmektedir. Bu, her 6-7 mezundan birinin yurt dışında olduğu anlamına gelmektedir. Bu durum, Türkiye'de moleküler biyoloji ve genetik alanında akademik kariyer ve araştırma altyapısının yetersiz olmasıyla ilişkilendirilmektedir. Ayrıca işletme mühendisliği, elektronik mühendisliği, matematik mühendisliği ve biyomühendislik gibi disiplinler arası mühendislik dalları da %9 üzerinde oranlarla dikkat çekmektedir. 2023'ten 2024'e moleküler biyoloji ve genetikteki oranın %17,9'dan %15,0'a düşmesi olumlu bir gelişme olarak yorumlanabilir; ancak hala kabul edilemez düzeyde yüksektir.
-
-### Eğitim Alanı Bazında Oran Dağılımı (Boxplot)
-
-Aşağıdaki boxplot grafiği, her bir eğitim alanının 4 yıllık değerlerinin değişkenliğini göstermektedir.
-
-```{r}
-#| label: grafik-boxplot
-#| fig-width: 10
-#| fig-height: 6
-
-veri_alanlar %>%
-  ggplot(aes(x = reorder(Egitim_Alani, Beyin_Gocu_Orani, FUN = median),
-             y = Beyin_Gocu_Orani, fill = Egitim_Alani)) +
-  geom_boxplot(alpha = 0.7) +
-  geom_jitter(width = 0.1, size = 1.5, alpha = 0.6) +
-  coord_flip() +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +
-  labs(
-    title = "Eğitim Alanı Bazında Beyin Göçü Oranı Dağılımı (2021-2024)",
-    x = "Eğitim Alanı",
-    y = "Beyin Göçü Oranı (%)"
+    title = "Ilk 5 Olum Nedeninde Olum Sayilarinin Logaritmik Dagilimi",
+    x = "Olum Nedeni",
+    y = "Olum Sayisi - Logaritmik Olcek",
+    fill = "Olum Nedeni"
   ) +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "none"
+  )
 ```
 
-Boxplot, alanlar arası değişkenliğin de küçük olduğunu ortaya koymaktadır; yani her alan kendi içinde yıllar arasında nispeten istikrarlı oranlara sahiptir. Bilişim alanının kutusu görece geniştir; bu da bu alanda yıllar arasında daha fazla dalgalanma olduğunu göstermektedir. Buna karşılık eğitim ve sağlık alanları çok dar kutulara sahiptir; bu alanlardaki göç oranları yıllar içinde neredeyse hiç değişmemektedir.
+Bu grafik, en fazla ölüm görülen ilk 5 ölüm nedeninde ölüm sayılarının yıllara göre dağılımını box plot grafiği ile göstermektedir. Grafik logaritmik ölçekle çizilmiştir. Logaritmik ölçek kullanılması, ölüm sayıları arasındaki büyük farkların daha dengeli görünmesini sağlamaktadır.\
+\
+Box plot grafiği ölüm nedenlerine göre ölüm sayılarının yıllar arasındaki yayılımını göstermektedir. Yayılımın geniş olması, ilgili ölüm nedeninde yıllar arasında ölüm sayılarının daha fazla değiştiğini; dar olması ise ölüm sayılarının daha istikrarlı seyrettiğini ifade eder.\
+\
+Grafikte “Dolaşım sistemi hastalıkları” en yüksek ölüm sayısına sahip kategori olarak öne çıkmaktadır. Bu kategoride kutu yapısı oldukça dar görünmektedir. Bu durum, dolaşım sistemi hastalıklarına bağlı ölüm sayılarının yıllar arasında çok büyük dalgalanma göstermediğini, belirli bir yüksek seviyede istikrarlı biçimde seyrettiğini göstermektedir.\
+\
+“İyi huylu ve kötü huylu tümörler” kategorisinde de yayılım oldukça sınırlıdır. Box plotun dar olması, tümör kaynaklı ölüm sayılarının yıllar arasında birbirine yakın değerlerde gerçekleştiğini göstermektedir. Yani bu ölüm nedeni yüksek seviyede olmakla birlikte yıllara göre daha düzenli bir yapı sergilemektedir.\
+\
+“Solunum sistemi hastalıkları” kategorisinde yayılımın dolaşım sistemi hastalıkları ve tümörlere göre biraz daha belirgin olduğu görülmektedir. Bu durum, solunum sistemi hastalıklarına bağlı ölüm sayılarının bazı yıllarda daha fazla değiştiğini düşündürmektedir. Özellikle salgın dönemleri veya mevsimsel etkiler bu kategorideki değişkenliği artırmış olabilir.\
+\
+“Bilinmeyen” kategorisi yayılım açısından en dikkat çeken gruplardan biridir. Kutunun daha geniş olması ve uç değer görülmesi, bu kategoride yıllar arasında ölüm sayılarının daha değişken olduğunu göstermektedir. Bu durum, bazı yıllarda bilinmeyen nedenlere bağlı ölüm kayıtlarının diğer yıllara göre farklılaştığını düşündürmektedir.\
+\
+“İç salgı bezi, beslenme ve metabolizmayla ilgili hastalıklar” kategorisinde ise yayılım görece daha dardır. Bu, ilgili ölüm nedeninde yıllar arasında daha sınırlı bir değişim olduğunu göstermektedir.\
+\
+Genel olarak değerlendirildiğinde, dolaşım sistemi hastalıkları ve tümörler yüksek ölüm sayılarına sahip olmalarına rağmen daha dar yayılım göstermektedir. Buna karşılık bilinmeyen nedenler ve kısmen solunum sistemi hastalıkları daha geniş yayılıma sahiptir. Bu durum, bazı ölüm nedenlerinin yıllar boyunca daha istikrarlı, bazılarının ise dönemsel koşullara bağlı olarak daha değişken seyrettiğini göstermektedir.
 
 ## Trend Analizi
 
-Bu bölümde her bir eğitim alanı için 4 yıllık dönem boyunca nasıl bir trend gözlendiği analiz edilmiştir. 2021'den 2024'e değişim oranları aşağıda hesaplanmıştır.
+Trend analizi bölümünde toplam ölüm sayılarının yıllara göre artış veya azalış eğilimi incelenmiştir. Bunun için yıllık değişim miktarı ve yıllık değişim oranı hesaplanmıştır.
+
+### Toplam Ölüm Sayısında Yıllık Değişim
 
 ```{r}
-#| label: trend-degisim
-
-trend_tablo <- veri_alanlar %>%
-  filter(Yil %in% c(2021, 2024)) %>%
-  pivot_wider(names_from = Yil, values_from = Beyin_Gocu_Orani,
-              names_prefix = "Yil_") %>%
+toplam_olum_degisim <- toplam_olum %>%
+  arrange(yil) %>%
   mutate(
-    Mutlak_Degisim = round(Yil_2024 - Yil_2021, 2),
-    Yuzde_Degisim = round((Yil_2024 - Yil_2021) / Yil_2021 * 100, 2),
-    Yon = case_when(
-      Mutlak_Degisim > 0.05 ~ "Artis",
-      Mutlak_Degisim < -0.05 ~ "Azalis",
-      TRUE ~ "Sabit"
-    )
-  ) %>%
-  arrange(desc(Mutlak_Degisim))
+    onceki_yil_olum = lag(olum_sayisi),
+    fark = olum_sayisi - onceki_yil_olum,
+    degisim_orani = (olum_sayisi / onceki_yil_olum - 1) * 100
+  )
 
-trend_tablo %>%
-  rename(
-    `Eğitim Alanı` = Egitim_Alani,
-    `2021 (%)` = Yil_2021,
-    `2024 (%)` = Yil_2024,
-    `Mutlak Değişim (puan)` = Mutlak_Degisim,
-    `Yüzde Değişim (%)` = Yuzde_Degisim,
-    `Yön` = Yon
-  ) %>%
-  kable(caption = "2021'den 2024'e Eğitim Alanı Bazında Değişim Analizi")
+toplam_olum_degisim %>%
+  kable(digits = 2)
 ```
 
-```{r}
-#| label: grafik-trend-degisim
-#| fig-width: 10
-#| fig-height: 5.5
+Bu tablo, toplam ölüm sayısının bir önceki yıla göre ne kadar değiştiğini göstermektedir. `fark` sütunu sayısal değişimi, `degisim_orani` sütunu ise yüzdesel değişimi ifade etmektedir.
 
-trend_tablo %>%
-  ggplot(aes(x = reorder(Egitim_Alani, Mutlak_Degisim),
-             y = Mutlak_Degisim, fill = Yon)) +
+### Yıllık Değişim Oranı Grafiği
+
+```{r}
+ggplot(toplam_olum_degisim, aes(x = yil, y = degisim_orani)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
   geom_col() +
-  geom_text(aes(label = sprintf("%+.2f", Mutlak_Degisim)),
-            hjust = ifelse(trend_tablo$Mutlak_Degisim >= 0, -0.1, 1.1),
-            size = 3.5) +
-  coord_flip() +
-  scale_fill_manual(values = c("Artis" = "#E63946",
-                               "Azalis" = "#06A77D",
-                               "Sabit" = "#888888")) +
   labs(
-    title = "2021-2024 Döneminde Beyin Göçü Oranı Değişimi (Mutlak Puan)",
-    subtitle = "Pozitif değerler artışı, negatif değerler azalışı gösterir",
-    x = "Eğitim Alanı",
-    y = "2024 - 2021 (puan)",
-    fill = "Yön"
+    title = "Toplam Olum Sayisinda Yillik Degisim Orani",
+    x = "Yil",
+    y = "Degisim Orani (%)"
   ) +
   theme_minimal()
 ```
 
-Trend analizi şu önemli bulguları ortaya koymaktadır: **Bilişim ve iletişim teknolojileri** alanında 4 yıl içinde 0,39 puanlık bir **azalış** olmuştur (%7,09'dan %6,70'e). Mühendislik alanında da küçük bir azalış vardır. Buna karşılık **doğa bilimleri, matematik ve istatistik** alanında 0,18 puanlık bir **artış** ve **sağlık ve refah** alanında 0,07 puanlık küçük bir artış gözlenmiştir. Eğitim ve hizmetler alanlarındaki değişim ihmal edilebilir düzeydedir. Bilişim alanındaki azalış olumlu bir sinyal olarak değerlendirilebilir; ancak hala mutlak değer olarak %6,70 oranı oldukça yüksektir.
+Bu grafik, toplam ölüm sayısının bir önceki yıla göre yüzde kaç arttığını veya azaldığını göstermektedir. Pozitif değerler artışı, negatif değerler ise azalışı ifade etmektedir.
+
+### İlk 5 Ölüm Nedeninin Yıllara Göre Değişimi
+
+```{r}
+# Tüm nedenler çıkarılarak ilk 5 ölüm nedeni belirlenir
+ilk5_neden <- en_fazla_neden %>%
+  mutate(
+    olum_nedeni = str_squish(as.character(olum_nedeni))
+  ) %>%
+  filter(
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE))
+  ) %>%
+  slice_max(order_by = toplam_olum, n = 5) %>%
+  pull(olum_nedeni)
+
+# İlk 5 ölüm nedeninin yıllara göre değişimi
+veri_neden_toplam %>%
+  mutate(
+    olum_nedeni = str_squish(as.character(olum_nedeni))
+  ) %>%
+  filter(
+    !str_detect(olum_nedeni, regex("^T.m nedenler$", ignore_case = TRUE)),
+    olum_nedeni %in% ilk5_neden
+  ) %>%
+  ggplot(aes(
+    x = yil,
+    y = olum_sayisi,
+    color = olum_nedeni,
+    group = olum_nedeni
+  )) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Ilk 5 Olum Nedeninin Yillara Gore Degisimi",
+    x = "Yil",
+    y = "Olum Sayisi",
+    color = "Olum Nedeni"
+  ) +
+  theme_minimal()
+```
+
+Bu grafik, en fazla ölüm görülen ilk 5 nedenin yıllar içerisindeki değişimini göstermektedir. Böylece hangi ölüm nedenlerinin zaman içinde artış veya azalış gösterdiği incelenebilir.
+
+\
+Genel olarak grafik, ölüm nedenleri arasında en güçlü ve sürekli yüksek seviyenin dolaşım sistemi hastalıklarında olduğunu göstermektedir. Tümörler daha stabil bir eğilim gösterirken, solunum sistemi hastalıkları ve bilinmeyen nedenler yıllar arasında daha fazla değişkenlik göstermektedir. Bu nedenle trend analizi, ölüm nedenlerinin yalnızca toplam büyüklük açısından değil, yıllara göre değişim davranışı açısından da farklılaştığını ortaya koymaktadır.
 
 ## Model Uydurma
 
-Bu bölümde her eğitim alanı için ayrı bir basit doğrusal regresyon modeli kurulmuştur. Modelin matematiksel formu şu şekildedir:
+Bu bölümde toplam ölüm sayısının yıllar içerisindeki eğilimini açıklamak için basit doğrusal regresyon modeli kurulmuştur. Modelde bağımlı değişken `olum_sayisi`, bağımsız değişken ise `yil` olarak belirlenmiştir.
 
-$$\text{Beyin Göçü Oranı}_i = \beta_0 + \beta_1 \cdot \text{Yıl}_i + \varepsilon_i$$
+Amaç, yıl değişkeninin toplam ölüm sayısı üzerinde doğrusal bir eğilim gösterip göstermediğini incelemektir.
 
-Burada $\beta_1$ katsayısı, yıllık ortalama değişimi puan cinsinden vermektedir. Pozitif $\beta_1$ artış eğilimini, negatif $\beta_1$ ise azalış eğilimini temsil eder. Modeller `lm()` fonksiyonu ile fit edilmiş, sonuçlar `broom::tidy()` ile düzenli (tidy) bir tabloya dönüştürülmüştür.
+### Basit Doğrusal Regresyon Modeli;
 
 ```{r}
-#| label: model-fit
+model_toplam <- lm(olum_sayisi ~ yil, data = toplam_olum)
 
-model_sonuclari <- veri_alanlar %>%
-  group_by(Egitim_Alani) %>%
-  do(tidy(lm(Beyin_Gocu_Orani ~ Yil, data = .))) %>%
-  ungroup()
+summary(model_toplam)
+```
 
-egilim_tablosu <- model_sonuclari %>%
-  filter(term == "Yil") %>%
-  select(Egitim_Alani, estimate, std.error, statistic, p.value) %>%
+Bu model, yıllar ilerledikçe toplam ölüm sayısında doğrusal bir artış veya azalış eğilimi olup olmadığını göstermektedir. Modelde `yil` katsayısı pozitifse ölüm sayısının yıllar içinde artma eğiliminde olduğu, negatifse azalma eğiliminde olduğu söylenebilir.
+
+Model Sonuçlarının Tablo Halinde Gösterimi
+
+```{r}
+glance(model_toplam) %>%
+  select(r.squared, adj.r.squared, sigma, statistic, p.value) %>%
+  kable(digits = 4)
+```
+
+`R-kare` değeri, modelin toplam ölüm sayısındaki değişimin ne kadarını yıl değişkeniyle açıklayabildiğini gösterir. Değer 1’e yaklaştıkça modelin açıklama gücü artar.
+
+### Gerçek Değerler ve Model Tahmini
+
+```{r}
+toplam_olum_model <- toplam_olum %>%
+  mutate(tahmin = predict(model_toplam))
+
+ggplot(toplam_olum_model, aes(x = yil)) +
+  geom_point(aes(y = olum_sayisi), size = 2) +
+  geom_line(aes(y = olum_sayisi), linewidth = 1) +
+  geom_line(aes(y = tahmin), linetype = "dashed", linewidth = 1) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Toplam Olum Sayisi Icin Dogrusal Model",
+    x = "Yil",
+    y = "Olum Sayisi"
+  ) +
+  theme_minimal()
+```
+
+Bu grafikte gerçek ölüm sayıları ile model tarafından tahmin edilen değerler birlikte gösterilmiştir. Gerçek değerler ile tahmin çizgisi arasındaki farklar modelin başarısını görsel olarak değerlendirmeye yardımcı olur.
+
+Grafikte kesiksiz çizgi gerçek toplam ölüm sayılarını, kesikli çizgi ise basit doğrusal regresyon modeliyle tahmin edilen eğilimi göstermektedir. Regresyon modeli, yıllar ilerledikçe toplam ölüm sayısında genel olarak artış yönlü bir eğilim olduğunu göstermektedir. Kesikli çizginin yukarı yönlü olması, modelin 2018-2024 döneminde ölüm sayılarında ortalama olarak artış eğilimi yakaladığını ifade eder.\
+\
+Ancak gerçek değerler incelendiğinde toplam ölüm sayılarının doğrusal bir şekilde artmadığı, yıllara göre dalgalı bir yapı gösterdiği görülmektedir. 2018 ve 2019 yıllarında gerçek ölüm sayıları model tahmininin altında kalmaktadır. 2020 yılında gerçek değer model tahmininin üzerine çıkmış, 2021 yılında ise çok belirgin biçimde model çizgisinin üstünde gerçekleşmiştir. Bu durum, 2021 yılında olağan dışı bir artış yaşandığını göstermektedir.\
+\
+2021 yılındaki bu zirve, COVID-19 salgınının toplam ölüm sayıları üzerindeki etkisiyle ilişkilendirilebilir. Basit doğrusal regresyon modeli genel eğilimi yakalamaya çalışsa da, COVID-19 gibi olağan dışı dönemsel etkileri tam olarak açıklamakta yetersiz kalmaktadır. Bu nedenle 2021 yılındaki gerçek ölüm sayısı, modelin tahmin ettiği değerin oldukça üzerine çıkmıştır.\
+\
+2022 yılında gerçek ölüm sayısı düşerek model çizgisine yaklaşmıştır. Bu yıl, model tahmini ile gerçek değerlerin birbirine daha yakın olduğu dönemlerden biridir. 2023 yılında gerçek değer yine model çizgisine yakın seyretmiş, ancak 2024 yılında gerçek ölüm sayısı model tahmininin altında kalmıştır. Bu durum, modelin son yıl için gerçek değerden daha yüksek bir ölüm sayısı tahmin ettiğini göstermektedir.\
+\
+Genel olarak değerlendirildiğinde, basit doğrusal regresyon modeli toplam ölüm sayısındaki uzun dönemli artış eğilimini göstermede faydalıdır. Ancak gerçek ölüm sayıları özellikle 2020-2021 döneminde salgın etkisi nedeniyle modelden belirgin şekilde sapmıştır. Bu nedenle bu model, genel trendi anlamak için kullanılabilir; fakat yıllar arasındaki ani artış ve düşüşleri açıklamak için tek başına yeterli değildir. Daha gelişmiş modellerde COVID-19 gibi özel dönem etkileri veya ölüm nedenleri ayrı değişkenler olarak modele dahil edilebilir.
+
+### Model Hata Metrikleri
+
+```{r}
+model_hata <- toplam_olum_model %>%
   mutate(
-    Anlamlilik = case_when(
-      p.value < 0.05 ~ "Anlamli (p<0.05)",
-      p.value < 0.10 ~ "Marjinal (p<0.10)",
-      TRUE ~ "Anlamsiz"
-    )
+    hata = olum_sayisi - tahmin,
+    mutlak_hata = abs(hata),
+    kare_hata = hata^2,
+    yuzde_hata = abs(hata / olum_sayisi) * 100
   ) %>%
-  arrange(estimate) %>%
-  rename(
-    `Eğitim Alanı` = Egitim_Alani,
-    `Eğilim Katsayısı (β₁)` = estimate,
-    `Standart Hata` = std.error,
-    `t Değeri` = statistic,
-    `p Değeri` = p.value,
-    `Anlamlılık` = Anlamlilik
+  summarise(
+    MAD = mean(mutlak_hata, na.rm = TRUE),
+    MSE = mean(kare_hata, na.rm = TRUE),
+    RMSE = sqrt(MSE),
+    MAPE = mean(yuzde_hata, na.rm = TRUE)
   )
 
-egilim_tablosu %>%
-  kable(digits = 4,
-        caption = "Eğitim alanı bazında doğrusal trend modeli sonuçları")
+model_hata %>%
+  kable(digits = 2)
 ```
 
-Model sonuçlarına göre **bilişim ve iletişim teknolojileri** alanı en negatif eğilim katsayısına sahiptir (yaklaşık -0,14 puan/yıl); yani bu alanda yıllık ortalama 0,14 puan azalış vardır. **Mühendislik** alanında da küçük negatif eğilim mevcuttur. **Doğa bilimleri** ise yaklaşık +0,06 puan/yıl pozitif eğilime sahiptir. Ancak veri yalnızca 4 yıllık olduğundan, modellerin standart hataları görece büyüktür ve çoğu katsayı istatistiksel olarak %95 güven düzeyinde anlamlı çıkmamıştır. Bu nedenle model sonuçları kesin tahminler olarak değil, gözlemlenen eğilimleri destekleyici tanımlayıcı analizler olarak yorumlanmalıdır.
-
-Aşağıdaki grafik, her alan için gözlenen verileri ve fit edilen doğrusal trendi birlikte göstermektedir.
-
-```{r}
-#| label: grafik-model-fit
-#| fig-width: 12
-#| fig-height: 7
-
-veri_alanlar %>%
-  ggplot(aes(x = Yil, y = Beyin_Gocu_Orani)) +
-  geom_point(size = 2, color = "#264653") +
-  geom_smooth(method = "lm", se = TRUE, color = "#E76F51", fill = "#F4A261", alpha = 0.3) +
-  facet_wrap(~ Egitim_Alani, scales = "free_y", ncol = 4) +
-  scale_x_continuous(breaks = c(2021, 2023)) +
-  scale_y_continuous(labels = function(x) paste0(x, "%")) +
-  labs(
-    title = "Eğitim Alanı Bazında Doğrusal Trend Modeli",
-    subtitle = "Gri bant: %95 güven aralığı",
-    x = "Yıl",
-    y = "Beyin Göçü Oranı (%)"
-  ) +
-  theme_minimal() +
-  theme(strip.text = element_text(size = 8))
-```
-
-Yukarıdaki facet grafiği, her alanın trend çizgisini ayrı bir alt panel olarak göstermektedir. Bilişim, mühendislik ve iş-yönetim-hukuk alanlarında belirgin azalış eğilimleri (negatif eğim) görülürken; doğa bilimleri ve sağlık alanlarında artış eğilimleri (pozitif eğim) görülmektedir. Eğitim alanında ise eğim yatay denecek kadar küçüktür.
+MAD, MSE, RMSE ve MAPE değerleri modelin tahmin hatasını değerlendirmek için kullanılmıştır. Hata değerlerinin düşük olması modelin gerçek değerlere daha yakın tahmin yaptığını gösterir.
 
 # Sonuçlar ve Ana Çıkarımlar
 
-Bu projede Türkiye İstatistik Kurumu'nun yayımladığı Yükseköğretim Beyin Göçü İstatistikleri kullanılarak, 2021-2024 dönemindeki beyin göçü oranları farklı boyutlarıyla incelenmiştir. Analizden elde edilen başlıca bulgular şu şekilde özetlenebilir:
-
-**Birincisi, eğitim alanları arasında muazzam bir farklılık vardır.** Bilişim ve iletişim teknolojileri (%6,7), eğitim (%0,7) alanına göre yaklaşık 10 kat daha yüksek bir beyin göçü oranına sahiptir. Bu büyük fark, alan ortalamalarını değerlendirirken dikkatli olunması gerektiğini, "Türkiye'de beyin göçü %2'dir" ifadesinin alanlar arasında çok büyük heterojenlikleri gizlediğini göstermektedir. STEM alanlarında oran açık ara yüksektir.
-
-**İkincisi, cinsiyetler arası fark süreğen ve belirgindir.** Erkeklerde %2,4 olan oran kadınlarda %1,6'da kalmaktadır. Bu farkın temel nedeni, beyin göçünün yoğun olduğu alanların (bilişim, mühendislik) erkek ağırlıklı bölümler olmasıdır. Ancak literatürdeki sosyolojik çalışmalar, kadınlar arasında da yurt dışı kariyer ilgisinin son yıllarda hızla arttığını ve farkın kapanmakta olduğunu ortaya koymaktadır.
-
-**Üçüncüsü, vakıf-devlet üniversitesi farkı çok büyüktür.** Vakıf üniversitesi mezunları (%4,3) devlet mezunlarına (%1,7) göre 2,5 kat daha yüksek oranda göç etmektedir. Vakıf üniversitelerinin tam burslu öğrencilerinde bu oran %8,3'e çıkmaktadır. Bu, akademik olarak en başarılı öğrencilerin yurt dışına yöneldiğini, ülkenin yetiştirdiği en nitelikli öğrencilerin gitme eğiliminde olduğunu göstermektedir.
-
-**Dördüncüsü, mezunların tercih ettiği ülkelerde değişim vardır.** 2023'te ABD birinci sıradayken (%21,4), 2024'te aradaki fark belirgin biçimde azalmış ve Almanya (%19,4) ABD'ye (%19,6) çok yaklaşmıştır. Bu değişim, ABD'nin vize politikalarının sıkılaşması ve Almanya'nın nitelikli iş gücü çekme stratejileri ile ilişkilendirilmektedir.
-
-**Beşincisi, eğitim dili belirleyici bir faktördür.** Fransızca eğitim alan mezunların beyin göçü oranı %9,9 ile en yüksektir; yani dil farkı çok önemli bir aracı değişkendir. Yabancı dilde eğitim alanlar, hem dil yetkinlikleri hem de uluslararası akademik ağlara erişim sayesinde yurt dışı kariyere daha kolay yönelmektedir.
-
-**Altıncısı, bölüm bazında veriler alan ortalamalarının ötesinde çok daha yüksek değerler ortaya koymaktadır.** Moleküler biyoloji ve genetik mezunlarının %15'i yurt dışına gitmektedir; yani bu bölümün her 6-7 mezunundan biri yurt dışındadır. İşletme mühendisliği, elektronik mühendisliği ve matematik mühendisliği de %9 üzerinde değerlerle dikkat çekmektedir.
-
-Yöntemsel olarak, fit edilen basit doğrusal modeller veri yalnızca 4 yıllık olduğu için istatistiksel olarak güçlü tahminler vermemektedir; ancak eğilim yönünü göstermek açısından faydalıdır. Daha sağlam çıkarımlar için TÜİK'in önümüzdeki yıllarda yayımlayacağı verilerle çalışmanın güncellenmesi, ayrıca panel veri analizi gibi daha gelişmiş yöntemlerin kullanılması önerilmektedir. Ayrıca TÜİK'in beyin göçü hesaplama yönteminin (mezuniyetten sonra en az 3 yıl yurt dışı kalma şartı), 2018 sonrası mezunların yansıtılmasında geç olduğu eleştirilmektedir; bu nedenle son yılların gerçek beyin göçü oranlarının resmi rakamların üzerinde olduğu düşünülmektedir.
-
-Sonuç olarak, Türkiye'de beyin göçü; eğitim alanı, cinsiyet, üniversite türü ve eğitim diline göre büyük farklılıklar gösteren, ortalamaların ardında ciddi heterojenlikler barındıran çok boyutlu bir olgudur. Politika önerileri açısından özellikle STEM alanlarında yurt içi kariyer fırsatlarının iyileştirilmesi, akademik araştırma altyapısının güçlendirilmesi ve nitelikli iş gücüne yönelik teşviklerin artırılması kritik öneme sahiptir.
-
-```{r}
-#| label: nihai-ozet
-
-veri_alanlar %>%
-  group_by(Egitim_Alani) %>%
-  summarise(
-    `Ortalama Oran (%)` = round(mean(Beyin_Gocu_Orani), 2),
-    `2021 (%)` = round(Beyin_Gocu_Orani[Yil == 2021], 2),
-    `2024 (%)` = round(Beyin_Gocu_Orani[Yil == 2024], 2),
-    `Degisim (puan)` = round(Beyin_Gocu_Orani[Yil == 2024] - Beyin_Gocu_Orani[Yil == 2021], 2),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(`Ortalama Oran (%)`)) %>%
-  rename(`Eğitim Alanı` = Egitim_Alani) %>%
-  kable(caption = "Nihai Özet Tablo: Eğitim Alanlarına Göre 2021-2024 Beyin Göçü Oranları")
-```
-
-## Veri Kaynakları
-
--   TÜİK, Yükseköğretim Beyin Göçü İstatistikleri, 2021-2023 (Eylül 2024)
--   TÜİK, Yükseköğretim Beyin Göçü İstatistikleri, 2024 (Ekim 2025)
--   Veri erişim adresi: https://data.tuik.gov.tr/
-
-## Yapay Zeka Kullanımı
-
-Bu proje hazırlanırken veri düzenleme ve görselleştirme aşamalarında üretici yapay zeka destekli araçlardan yararlanılmıştır. Kullanılan tüm istatistiksel veriler TÜİK'in resmi haber bültenlerinden alınmış olup, yorumlar ve sonuçlar proje ekibinin akademik değerlendirmesine dayanmaktadır.
+Bu proje kapsamında Türkiye’de 2018-2024 yılları arasında gerçekleşen ölümler; yıl, cinsiyet ve ölüm nedeni değişkenleri açısından incelenmiştir. Analizlerde toplam ölüm sayılarının yıllara göre değişimi, ölüm nedenlerinin toplam ölümler içindeki ağırlığı, kadın-erkek dağılımı, yıllık değişim eğilimleri ve basit doğrusal regresyon modeli birlikte değerlendirilmiştir.\
+\
+Genel ölüm eğilimi incelendiğinde, 2018 ve 2019 yıllarında toplam ölüm sayılarının görece daha düşük ve birbirine yakın seviyelerde olduğu görülmüştür. 2020 yılında ölüm sayılarında belirgin bir artış başlamış, 2021 yılında ise incelenen dönemin en yüksek ölüm sayısına ulaşılmıştır. Bu artışın en önemli nedenlerinden biri COVID-19 salgınının etkisidir. COVID-19 kaynaklı ölümler, özellikle 2020-2021 döneminde toplam ölüm sayılarının olağan eğilimin üzerine çıkmasına yol açmıştır. 2022 yılında toplam ölüm sayısında düşüş görülmüş, 2023 yılında yeniden artış yaşanmış, 2024 yılında ise tekrar azalma meydana gelmiştir. Bu durum, toplam ölüm sayılarının doğrusal ve sabit bir artış göstermediğini; yıllara göre dalgalı bir seyir izlediğini ortaya koymaktadır.\
+\
+Ölüm nedenleri açısından bakıldığında, toplam ölümler içerisinde en büyük payın dolaşım sistemi hastalıklarına ait olduğu görülmüştür. Bu kategori, analiz edilen dönem boyunca en yüksek ölüm yüküne sahip ölüm nedeni olarak öne çıkmaktadır. Dolaşım sistemi hastalıklarını iyi huylu ve kötü huylu tümörler ile solunum sistemi hastalıkları takip etmektedir. Bu sonuç, Türkiye’de ölümlerin önemli bir bölümünün kronik hastalık gruplarından kaynaklandığını göstermektedir. COVID-19 ise dönemsel etkisi güçlü olan özel bir ölüm nedeni olarak değerlendirilmiş ve özellikle 2021 yılındaki toplam ölüm artışını açıklamada önemli bir unsur olmuştur.\
+\
+Cinsiyet bazlı analizlerde, erkek ölüm sayılarının genel olarak kadın ölüm sayılarından daha yüksek olduğu görülmüştür. Ancak 2020-2021 döneminde kadın ölüm sayısındaki artış eğiminin erkeklere göre daha belirgin olduğu dikkat çekmektedir. Bu durum, ilgili dönemde kadın ölüm sayılarının oransal olarak daha hızlı arttığını göstermektedir. Buna rağmen mutlak değer olarak erkek ölüm sayıları tüm yıllarda kadın ölüm sayılarının üzerinde kalmıştır.\
+\
+İlk 5 ölüm nedeni cinsiyete göre incelendiğinde, dolaşım sistemi hastalıklarında kadın ve erkek oranlarının birbirine yakın olduğu görülmektedir. Tümörler, solunum sistemi hastalıkları ve bilinmeyen nedenlerde erkeklerin yüzdesel payı kadınlara göre daha yüksektir. Buna karşılık iç salgı bezi, beslenme ve metabolizmayla ilgili hastalıklarda kadınların payı erkeklerden fazladır. Bu bulgu, ölüm nedenlerinin cinsiyete göre farklı dağılım gösterebildiğini ortaya koymaktadır.\
+\
+Box plot analizi, ölüm nedenlerinin yalnızca toplam ölüm sayısı açısından değil, yıllar arası yayılım açısından da farklılaştığını göstermiştir. Dolaşım sistemi hastalıkları ve tümörler yüksek ölüm sayılarına sahip olmalarına rağmen daha dar bir yayılım göstermektedir. Bu durum, bu ölüm nedenlerinin yıllar boyunca daha istikrarlı seyrettiğini düşündürmektedir. Buna karşılık bilinmeyen nedenler ve kısmen solunum sistemi hastalıklarında daha geniş yayılım görülmektedir. Bu da ilgili kategorilerde yıllar arası değişkenliğin daha fazla olduğunu göstermektedir.\
+\
+Trend analizi sonucunda, toplam ölüm sayılarında 2018-2024 döneminde genel olarak artış yönlü bir eğilim olduğu görülmüştür. Ancak bu eğilim her yıl düzenli bir artış şeklinde gerçekleşmemiştir. Özellikle 2021 yılındaki COVID-19 etkisi, toplam ölüm sayılarında olağan dışı bir zirve oluşturmuştur. Bu nedenle toplam ölüm eğilimini değerlendirirken salgın gibi dönemsel etkilerin dikkate alınması gerekmektedir.\
+\
+Basit doğrusal regresyon modeli, toplam ölüm sayısının yıllar içerisindeki genel eğilimini göstermek amacıyla kullanılmıştır. Modelin kesikli tahmin çizgisi genel olarak yukarı yönlü bir eğilim göstermektedir. Ancak gerçek değerler, özellikle 2020 ve 2021 yıllarında model tahminlerinden belirgin şekilde sapmıştır. Bu durum, basit doğrusal regresyon modelinin genel trendi göstermede faydalı olduğunu; fakat COVID-19 gibi olağan dışı etkileri açıklamada sınırlı kaldığını göstermektedir.\
+\
+Genel olarak bu proje, Türkiye’de ölüm sayılarının yalnızca toplam değerler üzerinden değil; ölüm nedeni, cinsiyet ve yıl değişkenleri birlikte ele alınarak değerlendirilmesi gerektiğini göstermektedir. Elde edilen bulgular, toplum sağlığı açısından dolaşım sistemi hastalıkları, tümörler, solunum sistemi hastalıkları ve salgın kaynaklı ölümlerin dikkatle izlenmesi gerektiğini ortaya koymaktadır. Ayrıca cinsiyet bazlı farklılıklar, sağlık politikalarının ve risk değerlendirmelerinin daha ayrıntılı yapılması gerektiğini göstermektedir.
