@@ -12,6 +12,41 @@ editor: visual
 ---
 
 ```{r}
+#| label: setup-veri
+#| include: false
+
+
+
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(broom)
+
+# Veri dosyalarını oku (data/ klasöründe olmalılar)
+veri_alanlar    <- read_excel("data/beyin_gocu_alanlar.xlsx")
+veri_cinsiyet   <- read_excel("data/beyin_gocu_cinsiyet.xlsx")
+veri_universite <- read_excel("data/beyin_gocu_universite.xlsx")
+veri_ulke       <- read_excel("data/beyin_gocu_ulke.xlsx")
+veri_dil        <- read_excel("data/beyin_gocu_dil.xlsx")
+veri_bolum      <- read_excel("data/beyin_gocu_bolum.xlsx")
+
+# Grafiklerde kullanılan özet tabloları
+alan_ortalama <- veri_alanlar %>%
+  group_by(Egitim_Alani) %>%
+  summarise(
+    Ortalama_Oran = mean(Beyin_Gocu_Orani),
+    Min_Oran      = min(Beyin_Gocu_Orani),
+    Max_Oran      = max(Beyin_Gocu_Orani),
+    .groups = "drop"
+  )
+
+yillik_ortalama <- veri_alanlar %>%
+  group_by(Yil) %>%
+  summarise(Ortalama_Oran = mean(Beyin_Gocu_Orani), .groups = "drop")
+```
+---
+
+```{r}
 #| label: setup
 #| message: false
 #| warning: false
